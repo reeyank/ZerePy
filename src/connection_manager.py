@@ -105,8 +105,11 @@ class ConnectionManager:
                             print("Usage: agent-action twitter get-latest-tweets <username> <count>")
                             return None
                     elif action_string == "post-tweet":
-                        # Join all remaining arguments as the tweet message
-                        kwargs['message'] = ' '.join(args)
+                        # Join args and strip quotes for the actual tweet
+                        message = ' '.join(args)
+                        if message.startswith('"') and message.endswith('"'):
+                            message = message[1:-1]
+                        kwargs['message'] = message
                     elif action_string == "like-tweet":
                         if len(args) == 1:
                             kwargs['tweet_id'] = args[0]
