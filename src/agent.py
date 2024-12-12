@@ -39,7 +39,7 @@ class ZerePyAgent:
             # READ TIMELINE AND REPLY
             print("\nREAD TWITTER TIMELINE")
             timeline_tweets = self.connection_manager.find_and_perform_action(
-                action_string="read_timeline",
+                action_string="read-timeline",
                 connection_string="twitter",
                 **{"count": self.timeline_read_count})
             for x, tweet in enumerate(timeline_tweets):

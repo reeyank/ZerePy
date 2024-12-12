@@ -10,19 +10,19 @@ class TwitterConnection(BaseConnection):
     def __init__(self):
         super().__init__()
         self.actions = {
-            "get_latest_tweets": {
+            "get-lates-tweets": {
                 "func": self.get_latest_tweets,
                 "args": {"username": "str", "count": "int"}
             },
-            "post_tweet": {
+            "post-tweet": {
                 "func": self.post_tweet,
                 "args": {"message": "str"},
             },
-            "read_timeline": {
+            "read-timeline": {
                 "func": self.read_timeline,
                 "args": {"count": "int"},
             },
-            "like_tweet": {
+            "like-tweet": {
                 "func": self.like_tweet,
                 "args": {"tweet_id": "str"},
             }
