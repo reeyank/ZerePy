@@ -68,24 +68,54 @@ class ConnectionManager:
             # List available actions
             print("\nAVAILABLE ACTIONS:")
             for action, details in connection.actions.items():
-                print(f"- {action}: {details['args']}")
+                print(f"- {action}: {details}")
         except KeyError:
             print("\nUnknown connection. Try 'list-connections' to see all supported connections.")
         except Exception as e:
             print(f"\nAn error occurred: {e}")
 
-    def find_and_perform_action(self, action_string, connection_string, **kwargs):
+    def find_and_perform_action(self, action_string: str, connection_string: str, **kwargs):
         try:
-            # Match connection string to a supported connection
+            # Get the connection
             connection = self.connections[connection_string]
-
-            # Run action
-            result = connection.perform_action(action_string, **kwargs)
-
-            # Return result
-            return result
-        except KeyError:
-            print("\nUnknown connection. Try 'list-connections' to see all supported connections.")
+        
+            # Get the action info
+            action_info = connection.actions.get(action_string)
+            if not action_info:
+                raise KeyError(f"Unknown action: {action_string}")
+        
+            # Extract arguments based on input list
+            if 'input_list' in kwargs:
+                input_list = kwargs.pop('input_list')
+                # Skip first three elements (command, connection, and action name)
+                args = input_list[3:]
+            
+                if len(args) > 0:
+                    # Handle different actions
+                    if action_string == "get-latest-tweets":
+                        if len(args) >= 2:
+                            kwargs['username'] = args[0]
+                            try:
+                                kwargs['count'] = int(args[1])
+                            except ValueError:
+                                print("\nError: Count must be a number")
+                                return None
+                        else:
+                            print("\nError: get-latest-tweets requires both username and count arguments")
+                            print("Usage: agent-action twitter get-latest-tweets <username> <count>")
+                            return None
+                    elif action_string == "post-tweet":
+                        # Join all remaining arguments as the tweet message
+                        kwargs['message'] = ' '.join(args)
+        
+            # Call the action function with the arguments
+            return connection.perform_action(action_string, **kwargs)
+        
+        except KeyError as e:
+            print(f"\nUnknown connection or action: {str(e)}")
+            return None
+        except ValueError as e:
+            print(f"\nInvalid argument: {str(e)}")
             return None
         except Exception as e:
             print(f"\nAn error occurred: {e}")
