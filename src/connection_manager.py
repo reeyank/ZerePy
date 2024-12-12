@@ -107,6 +107,13 @@ class ConnectionManager:
                     elif action_string == "post-tweet":
                         # Join all remaining arguments as the tweet message
                         kwargs['message'] = ' '.join(args)
+                    elif action_string == "like-tweet":
+                        if len(args) == 1:
+                            kwargs['tweet_id'] = args[0]
+                        else:
+                            print("\nError: like-tweet requires exactly one tweet ID argument")
+                            print("Usage: agent-action twitter like-tweet <tweet_id>")
+                            return None
         
             # Call the action function with the arguments
             return connection.perform_action(action_string, **kwargs)
