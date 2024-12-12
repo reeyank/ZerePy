@@ -9,6 +9,7 @@ import tweepy
 class TwitterConnection(BaseConnection):
     def __init__(self):
         super().__init__()
+        self._oauth_session = None
         self.actions = {
             "get-latest-tweets": {
                 "func": self.get_latest_tweets,
@@ -34,6 +35,27 @@ class TwitterConnection(BaseConnection):
             return self.actions[action_name]["func"](**kwargs)
         raise Exception(f"Unknown action: {action_name}")
 
+    def _get_oauth(self) -> OAuth1Session:
+        """Get or create OAuth session using stored credentials"""
+        if self._oauth_session is None:
+            load_dotenv()
+            consumer_key = os.getenv("TWITTER_CONSUMER_KEY")
+            consumer_secret = os.getenv("TWITTER_CONSUMER_SECRET")
+            access_token = os.getenv("TWITTER_ACCESS_TOKEN")
+            access_token_secret = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
+
+            if not all([consumer_key, consumer_secret, access_token, access_token_secret]):
+                raise ValueError("Missing required Twitter credentials in environment")
+
+            self._oauth_session = OAuth1Session(
+                consumer_key,
+                client_secret=consumer_secret,
+                resource_owner_key=access_token,
+                resource_owner_secret=access_token_secret,
+            )
+
+        return self._oauth_session
+
     def get_latest_tweets(self, username: str, count: int = 10, **kwargs):
         """
         Get latest tweets for a user
@@ -48,35 +70,18 @@ class TwitterConnection(BaseConnection):
         Raises:
             Exception: If API request fails or credentials are invalid
         """
-        # Load credentials
-        load_dotenv()
-        consumer_key = os.getenv("TWITTER_CONSUMER_KEY")
-        consumer_secret = os.getenv("TWITTER_CONSUMER_SECRET") 
-        access_token = os.getenv("TWITTER_ACCESS_TOKEN")
-        access_token_secret = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
-
-        # Get user ID for the username
-        oauth = OAuth1Session(
-            consumer_key,
-            client_secret=consumer_secret,
-            resource_owner_key=access_token,
-            resource_owner_secret=access_token_secret,
-        )
-        
         try:
-            user_id = self.get_user_id_from_username(oauth, username)
+            user_id = self.get_user_id_from_username(username)
         except Exception as e:
             raise Exception(f"Failed to get user ID for username {username}: {str(e)}")
 
-        # Set up parameters for tweet request
         params = {
             "tweet.fields": "created_at,public_metrics,text",
             "max_results": min(count, 100),  # API limit is 100
             "exclude": "retweets,replies"
         }
 
-        # Make request to get user's tweets
-        response = oauth.get(
+        response = self._get_oauth().get(
             f"https://api.twitter.com/2/users/{user_id}/tweets",
             params=params
         )
@@ -86,7 +91,6 @@ class TwitterConnection(BaseConnection):
                 f"Request returned an error: {response.status_code} {response.text}"
             )
 
-        # Parse and return the tweets
         json_response = response.json()
         return json_response.get("data", [])
 
@@ -104,32 +108,12 @@ class TwitterConnection(BaseConnection):
             Exception: If API request fails or credentials are invalid
             ValueError: If message exceeds Twitter's character limit
         """
-        # Check message length
         if len(message) > 280:
             raise ValueError("Tweet exceeds 280 character limit")
 
-        # Load credentials
-        load_dotenv()
-        consumer_key = os.getenv("TWITTER_CONSUMER_KEY")
-        consumer_secret = os.getenv("TWITTER_CONSUMER_SECRET")
-        access_token = os.getenv("TWITTER_ACCESS_TOKEN")
-        access_token_secret = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
-
-        # Set up OAuth session
-        oauth = OAuth1Session(
-            consumer_key,
-            client_secret=consumer_secret,
-            resource_owner_key=access_token,
-            resource_owner_secret=access_token_secret,
-        )
-
-        # Prepare payload
-        payload = {"text": message}
-
-        # Make request to post tweet
-        response = oauth.post(
+        response = self._get_oauth().post(
             "https://api.twitter.com/2/tweets",
-            json=payload
+            json={"text": message}
         )
 
         if response.status_code != 201:
@@ -137,15 +121,14 @@ class TwitterConnection(BaseConnection):
                 f"Request returned an error: {response.status_code} {response.text}"
             )
 
-        # Return the response data
         return response.json()
 
-    def get_user_id_from_username(self, oauth: OAuth1Session, username: str) -> str:
+    def get_user_id_from_username(self, username: str) -> str:
         """
         Get the numeric user ID for a given Twitter username using the Twitter API v2
         """
         params = {"usernames": username}
-        response = oauth.get(
+        response = self._get_oauth().get(
             "https://api.twitter.com/2/users/by",
             params=params
         )
@@ -228,7 +211,7 @@ class TwitterConnection(BaseConnection):
             access_token_secret = oauth_tokens.get("oauth_token_secret")
 
             # Create new OAuth session with final credentials to get user ID
-            oauth = OAuth1Session(
+            self._oauth_session = OAuth1Session(
                 consumer_key,
                 client_secret=consumer_secret,
                 resource_owner_key=access_token,
@@ -237,7 +220,7 @@ class TwitterConnection(BaseConnection):
 
             # Get numeric user ID using Twitter API
             try:
-                user_id = self.get_user_id_from_username(oauth, username)
+                user_id = self.get_user_id_from_username(username)
             except Exception as e:
                 print(f"\n❌ Error getting user ID: {str(e)}")
                 print("Using username as fallback...")
@@ -302,14 +285,7 @@ class TwitterConnection(BaseConnection):
 
     def read_timeline(self, count=10, **kwargs) -> list:
         """Read tweets from the user's timeline"""
-        # Load credentials
-        load_dotenv()
-        consumer_key = os.getenv("TWITTER_CONSUMER_KEY")
-        consumer_secret = os.getenv("TWITTER_CONSUMER_SECRET")
-        access_token = os.getenv("TWITTER_ACCESS_TOKEN")
-        access_token_secret = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
         user_id = os.getenv("TWITTER_USER_ID")
-
         if not user_id:
             raise ValueError("TWITTER_USER_ID not found in environment variables.")
 
@@ -320,14 +296,7 @@ class TwitterConnection(BaseConnection):
             "max_results": count
         }
 
-        oauth = OAuth1Session(
-            consumer_key,
-            client_secret=consumer_secret,
-            resource_owner_key=access_token,
-            resource_owner_secret=access_token_secret,
-        )
-
-        response = oauth.get(
+        response = self._get_oauth().get(
             f"https://api.twitter.com/2/users/{user_id}/timelines/reverse_chronological",
             params=params
         )
@@ -369,27 +338,11 @@ class TwitterConnection(BaseConnection):
         Raises:
             Exception: If API request fails or credentials are invalid
         """
-        # Load credentials
-        load_dotenv()
-        consumer_key = os.getenv("TWITTER_CONSUMER_KEY")
-        consumer_secret = os.getenv("TWITTER_CONSUMER_SECRET")
-        access_token = os.getenv("TWITTER_ACCESS_TOKEN")
-        access_token_secret = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
         user_id = os.getenv("TWITTER_USER_ID")
-
         if not user_id:
             raise ValueError("TWITTER_USER_ID not found in environment variables.")
 
-        # Set up OAuth session
-        oauth = OAuth1Session(
-            consumer_key,
-            client_secret=consumer_secret,
-            resource_owner_key=access_token,
-            resource_owner_secret=access_token_secret,
-        )
-
-        # Make request to like tweet
-        response = oauth.post(
+        response = self._get_oauth().post(
             f"https://api.twitter.com/2/users/{user_id}/likes",
             json={"tweet_id": tweet_id}
         )
@@ -399,5 +352,4 @@ class TwitterConnection(BaseConnection):
                 f"Request returned an error: {response.status_code} {response.text}"
             )
 
-        # Return the response data
         return response.json()
