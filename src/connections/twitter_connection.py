@@ -1,6 +1,5 @@
 import json
 import os
-
 from dotenv import set_key, load_dotenv
 from requests_oauthlib import OAuth1Session
 from src.connections.base_connection import BaseConnection
@@ -12,11 +11,11 @@ class TwitterConnection(BaseConnection):
         super().__init__()
         self.actions = {
             "get_latest_tweets": {
-                "func": "get_latest_tweets",
+                "func": self.get_latest_tweets,
                 "args": {"username": "str", "count": "int"}
             },
             "post_tweet": {
-                "func": "post_tweet",
+                "func": self.post_tweet,
                 "args": {"message": "str"},
             },
             "read_timeline": {
@@ -29,7 +28,45 @@ class TwitterConnection(BaseConnection):
             }
         }
 
+    def perform_action(self, action_name: str, **kwargs):
+        """Implementation of abstract method from BaseConnection"""
+        if action_name in self.actions:
+            return self.actions[action_name]["func"](**kwargs)
+        raise Exception(f"Unknown action: {action_name}")
+
+    def get_latest_tweets(self, username: str, count: int = 10, **kwargs):
+        """Get latest tweets for a user"""
+        # TODO: Implement get_latest_tweets
+        pass
+
+    def post_tweet(self, message: str, **kwargs):
+        """Post a new tweet"""
+        # TODO: Implement post_tweet
+        pass
+
+    def get_user_id_from_username(self, oauth: OAuth1Session, username: str) -> str:
+        """
+        Get the numeric user ID for a given Twitter username using the Twitter API v2
+        """
+        params = {"usernames": username}
+        response = oauth.get(
+            "https://api.twitter.com/2/users/by",
+            params=params
+        )
+
+        if response.status_code != 200:
+            raise Exception(
+                f"Request returned an error: {response.status_code} {response.text}"
+            )
+
+        json_response = response.json()
+        if not json_response.get("data"):
+            raise Exception(f"No user found for username: {username}")
+            
+        return json_response["data"][0]["id"]
+
     def configure(self):
+        """Sets up Twitter API authentication"""
         print("\n🐦 TWITTER AUTHENTICATION SETUP")
 
         # Check if config already exists
@@ -49,7 +86,7 @@ class TwitterConnection(BaseConnection):
 
         # Get account details
         print("\nPlease enter your Twitter API credentials:")
-        account_id = input("Enter your Twitter username (without @): ")
+        username = input("Enter your Twitter username (without @): ")
         consumer_key = input("Enter your API Key (consumer key): ")
         consumer_secret = input("Enter your API Key Secret (consumer secret): ")
 
@@ -94,19 +131,36 @@ class TwitterConnection(BaseConnection):
             access_token = oauth_tokens.get("oauth_token")
             access_token_secret = oauth_tokens.get("oauth_token_secret")
 
+            # Create new OAuth session with final credentials to get user ID
+            oauth = OAuth1Session(
+                consumer_key,
+                client_secret=consumer_secret,
+                resource_owner_key=access_token,
+                resource_owner_secret=access_token_secret,
+            )
+
+            # Get numeric user ID using Twitter API
+            try:
+                user_id = self.get_user_id_from_username(oauth, username)
+            except Exception as e:
+                print(f"\n❌ Error getting user ID: {str(e)}")
+                print("Using username as fallback...")
+                user_id = username
+
             # Save everything to .env file
             if not os.path.exists('.env'):
                 with open('.env', 'w') as f:
                     f.write('')
 
-            set_key('.env', 'TWITTER_ACCOUNT_ID', account_id)
+            set_key('.env', 'TWITTER_USERNAME', username)
+            set_key('.env', 'TWITTER_USER_ID', user_id)
             set_key('.env', 'TWITTER_CONSUMER_KEY', consumer_key)
             set_key('.env', 'TWITTER_CONSUMER_SECRET', consumer_secret)
             set_key('.env', 'TWITTER_ACCESS_TOKEN', access_token)
             set_key('.env', 'TWITTER_ACCESS_TOKEN_SECRET', access_token_secret)
 
             print("\n✅ Twitter authentication successfully set up!")
-            print("Your API keys, secrets, and account ID have been stored in the .env file.")
+            print("Your API keys, secrets, username, and user ID have been stored in the .env file.")
 
         except Exception as e:
             print(f"\n❌ An error occurred during setup: {str(e)}")
@@ -124,9 +178,10 @@ class TwitterConnection(BaseConnection):
             consumer_secret = os.getenv('TWITTER_CONSUMER_SECRET')
             access_token = os.getenv('TWITTER_ACCESS_TOKEN')
             access_token_secret = os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
+            user_id = os.getenv('TWITTER_USER_ID')
 
             # Check if values present
-            if not consumer_key or not consumer_secret or not access_token or not access_token_secret:
+            if not all([consumer_key, consumer_secret, access_token, access_token_secret, user_id]):
                 return False
             
             # Initialize tweepy client
@@ -149,33 +204,18 @@ class TwitterConnection(BaseConnection):
                 print("❌ There was an error validating your Twitter credentials:", e)
             return False
 
-    def perform_action(self, action_name, **kwargs):
-        try:
-            # Match action string to a supported action
-            action = self.actions[action_name]
-            action_func = action["func"]
-
-            # Run action function
-            result = action_func(self, **kwargs)
-
-            # Return result
-            return result
-        except KeyError:
-            raise Exception(f"Unknown action: {action_name}")
-        except Exception as e:
-            raise Exception(f"An error occurred: {e}")
-
-
     def read_timeline(self, count=10, **kwargs) -> list:
+        """Read tweets from the user's timeline"""
+        # Load credentials
+        load_dotenv()
         consumer_key = os.getenv("TWITTER_CONSUMER_KEY")
         consumer_secret = os.getenv("TWITTER_CONSUMER_SECRET")
         access_token = os.getenv("TWITTER_ACCESS_TOKEN")
         access_token_secret = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
+        user_id = os.getenv("TWITTER_USER_ID")
 
-        # Ensure 'TWITTER_USER_ID' is set in your environment variables
-        user_id = os.getenv("TWITTER_ACCOUNT_ID")
         if not user_id:
-            raise ValueError("TWITTER_ACCOUNT_ID not found in environment variables.")
+            raise ValueError("TWITTER_USER_ID not found in environment variables.")
 
         params = {
             "tweet.fields": "created_at,author_id,attachments",

@@ -67,8 +67,8 @@ class ConnectionManager:
 
             # List available actions
             print("\nAVAILABLE ACTIONS:")
-            for action in connection.actions:
-                print(f"- {action}: {connection.actions[action]["args"]}")
+            for action, details in connection.actions.items():
+                print(f"- {action}: {details['args']}")
         except KeyError:
             print("\nUnknown connection. Try 'list-connections' to see all supported connections.")
         except Exception as e:
