@@ -85,7 +85,7 @@ class ConnectionManager:
                 
                 if len(args) < len(required):
                     print(f"\nError: {action_string} requires {len(required)} arguments")
-                    print(f"Usage: agent-action {connection_string} {action_string} {param_info.get('usage', '')}")
+                    print(f"Usage: agent_action {connection_string} {action_string} {param_info.get('usage', '')}")
                     return None
 
                 # Handle parameters based on action requirements

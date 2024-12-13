@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "zerepy"
+name = "ZerePy"
 version = "0.1.0"
 description = "A launch-pad for AI agents"
 authors = ["Ayoub Ed <ayoub@blorm.xyz>", "Efrain <ef@blorm.xyz>", "Max <max@bloem.xyz>"]
@@ -11,6 +11,7 @@ python = "^3.10"
 python-dotenv = "^1.0.1"
 openai = "^1.57.2"
 tweepy = "^4.14.0"
+prompt-toolkit = "^3.0.48"
 
 
 [build-system]

@@ -23,7 +23,7 @@ cd ZerePy
 
 3. Install dependencies:
 ```bash
-poetry install
+poetry install --no-root
 ```
 
 This will create a virtual environment and install all required dependencies.
