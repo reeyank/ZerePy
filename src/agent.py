@@ -6,25 +6,31 @@ from src.connection_manager import ConnectionManager
 
 class ZerePyAgent:
     def __init__(
-            self, name: str,
+            self,
+            name: str,
             model: str,
+            model_provider: str,
             connection_manager: ConnectionManager,
             bio: str,
-            moderated: bool=True,
+            traits: list[str],
+            examples: list[str],
             timeline_read_count: int=10,
             replies_per_tweet: int=5,
             loop_delay: int=30
     ):
         self.name = name
         self.model = model
+        self.model_provider = model_provider
         self.connection_manager = connection_manager
         self.bio = bio
-        self.moderated = moderated
+        self.traits = traits
+        self.examples = examples
 
         # Behavior Parameters
         self.timeline_read_count = timeline_read_count
         self.replies_per_tweet = replies_per_tweet
         self.loop_delay = loop_delay
+
 
     def loop(self):
         # INITIAL DELAY
@@ -67,13 +73,48 @@ class ZerePyAgent:
             return result
 
     def to_dict(self):
-        # TODO: Add all fields
         return {
             "name": self.name,
             "model": self.model,
+            "model_provider": self.model_provider,
             "bio": self.bio,
-            "moderated": self.moderated
+            "traits": self.traits,
+            "examples": self.examples,
+            "timeline_read_count": self.timeline_read_count,
+            "replies_per_tweet": self.replies_per_tweet,
+            "loop_delay": self.loop_delay
         }
+
+    def prompt_llm(self, prompt, **kwargs):
+        # TODO: Create system prompt from agent bio, traits, examples
+        system_prompt = "You are a helpful assistant."
+        return self.connection_manager.find_and_perform_action(
+            action_string="generate-text",
+            connection_string=self.model_provider,
+            prompt=prompt,
+            system_prompt=system_prompt,
+            model=self.model,
+            **kwargs)
+
+    def set_preferred_model(self, model):
+        # Check if model is valid
+        result = self.connection_manager.find_and_perform_action(
+            action_string="check-model",
+            connection_string=self.model_provider,
+            model=model)
+        if result:
+            self.model = model
+            print("Model successfully changed.")
+        else:
+            print("Model not valid for current provider. No changes made.")
+
+    def set_preferred_model_provider(self, model_provider):
+        self.model_provider = model_provider
+
+    def list_available_models(self):
+        self.connection_manager.find_and_perform_action(
+            action_string="list-models",
+            connection_string=self.model_provider)
 
 
 def load_agent_from_file(agent_path: str, connection_manager: ConnectionManager) -> ZerePyAgent:
@@ -85,9 +126,14 @@ def load_agent_from_file(agent_path: str, connection_manager: ConnectionManager)
         agent = ZerePyAgent(
             name=agent_dict["name"],
             model=agent_dict["model"],
+            model_provider=agent_dict["model_provider"],
             connection_manager=connection_manager,
             bio=agent_dict["bio"],
-            moderated=agent_dict["moderated"]
+            traits=agent_dict["traits"],
+            examples=agent_dict["examples"],
+            timeline_read_count=agent_dict["timeline_read_count"],
+            replies_per_tweet=agent_dict["replies_per_tweet"],
+            loop_delay=agent_dict["loop_delay"]
         )
     except FileNotFoundError:
         raise FileNotFoundError(f"Agent file not found at path: {agent_path}")

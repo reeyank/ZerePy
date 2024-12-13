@@ -28,18 +28,21 @@ class OpenAIConnection(BaseConnection):
         self.actions={
             "generate-text": {
                 "func": self.generate_text,
-                "args": {"prompt": "str", "system_prompt": "str"}
+                "args": {
+                    "prompt": "str",
+                    "system_prompt": "str",
+                    "model": "str"
+                }
             },
             "check-model": {
                 "func": self.check_model,
-                "args": {}
-            },
-            "set-model": {
-                "func": self.set_model,
                 "args": {"model": "str"}
+            },
+            "list-models": {
+                "func": self.list_models,
+                "args": {}
             }
         }
-        self.model = None
 
     def configure(self):
         """Sets up OpenAI API authentication"""
@@ -68,35 +71,8 @@ class OpenAIConnection(BaseConnection):
             # Save API key to .env file
             set_key('.env', 'OPENAI_API_KEY', api_key)
 
-            # Get available models
-            client = OpenAI(api_key=api_key)
-            response = client.models.list().data
-            model_ids = [model.id for model in response]
-            fine_tuned_models = [model for model in response if model.owned_by in ["organization", "user", "organization-owner"]]
-
-            # Get preferred model from user
-            print("\n📝 Now please select your preferred OpenAI LLM model:")
-            print("\nGPT MODELS:")
-            print("1. gpt-3.5-turbo")
-            print("2. gpt-4")
-            print("3. gpt-4-turbo")
-            print("4. gpt-4o")
-            print("5. gpt-4o-mini")
-            if fine_tuned_models:
-                print("\nFINE-TUNED MODELS:")
-                for i, model in enumerate(fine_tuned_models):
-                    print(f"{i+1}. {model.id}")
-
-            chosen_model = input(f"\nEnter the name of your preferred model ('gpt-3.5-turbo' by default): ")
-
-            if chosen_model not in model_ids:
-                print("\n❌ Invalid model name. Defaulting to gpt-3.5-turbo. You can change this using 'agent-action openai set-model' later.")
-                chosen_model = "gpt-3.5-turbo"
-
-            self.model = chosen_model
-
             print("\n✅ OpenAI API configuration successfully saved!")
-            print("Your API key and model preference have been stored in the .env file.")
+            print("Your API key has been stored in the .env file.")
 
         except Exception as e:
             print(f"\n❌ An error occurred during setup: {str(e)}")
@@ -138,14 +114,14 @@ class OpenAIConnection(BaseConnection):
         logger.error(error_msg)
         raise OpenAIConnectionError(error_msg)
 
-    def generate_text(self, prompt : str, system_prompt : str, **kwargs):
+    def generate_text(self, prompt : str, system_prompt : str, model : str, **kwargs):
         try:
             # Initialize the client
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
             # Make the API call
             completion = client.chat.completions.create(
-                model=self.model,
+                model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt},
@@ -158,18 +134,41 @@ class OpenAIConnection(BaseConnection):
         except Exception as e:
             raise OpenAIAPIError(e)
 
-    def check_model(self, **kwargs):
-        return self.model
-
-    def set_model(self, model, **kwargs):
+    def check_model(self, model, **kwargs):
         try:
             # Make sure model exists
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-            response = client.models.retrieve(model=model)
+            try:
+                response = client.models.retrieve(model=model)
 
-            # If we get here, the model exists
-            self.model = model
-            return "Model set to: " + self.model
+                # If we get here, the model exists
+                return True
+            except Exception:
+                return False
+        except Exception as e:
+            raise OpenAIAPIError(e)
+
+    def list_models(self, **kwargs):
+        try:
+            # Get available models
+            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            response = client.models.list().data
+            model_ids = [model.id for model in response]
+            fine_tuned_models = [model for model in response if model.owned_by in ["organization", "user", "organization-owner"]]
+
+            # List available models
+            logging.info("\nGPT MODELS:")
+            logging.info("1. gpt-3.5-turbo")
+            logging.info("2. gpt-4")
+            logging.info("3. gpt-4-turbo")
+            logging.info("4. gpt-4o")
+            logging.info("5. gpt-4o-mini")
+            if fine_tuned_models:
+                logging.info("\nFINE-TUNED MODELS:")
+                for i, model in enumerate(fine_tuned_models):
+                    logging.info(f"{i+1}. {model.id}")
+
+            return
         except Exception as e:
             raise OpenAIAPIError(e)
