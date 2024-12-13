@@ -1,5 +1,6 @@
 import os
 import sys
+import logging
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional
 from pathlib import Path
@@ -11,6 +12,10 @@ from prompt_toolkit.history import FileHistory
 from src.agent import load_agent_from_file
 from src.helpers import print_h_bar
 from src.connection_manager import ConnectionManager
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+logger = logging.getLogger(__name__)
 
 @dataclass
 class Command:
@@ -53,7 +58,7 @@ class ZerePyCLI:
                 name="help",
                 description="Displays a list of all available commands, or help for a specific command.",
                 tips=["Try 'help' to see available commands.",
-                     "Try 'help {command}' to get more information about a specific command."],
+                      "Try 'help {command}' to get more information about a specific command."],
                 handler=self.help,
                 aliases=['h', '?']
             )
@@ -65,8 +70,8 @@ class ZerePyCLI:
                 name="agent-action",
                 description="Runs a single agent action.",
                 tips=["Format: agent-action {connection} {action}",
-                     "Use 'list-connections' to see available connections.",
-                     "Use 'list-actions' to see available actions."],
+                      "Use 'list-connections' to see available connections.",
+                      "Use 'list-actions' to see available actions."],
                 handler=self.agent_action,
                 aliases=['action', 'run']
             )
@@ -89,7 +94,7 @@ class ZerePyCLI:
                 name="list-agents",
                 description="Lists all available agents you have on file.",
                 tips=["Agents are stored in the 'agents' directory",
-                     "Use 'load-agent' to load an available agent"],
+                      "Use 'load-agent' to load an available agent"],
                 handler=self.list_agents,
                 aliases=['agents', 'ls-agents']
             )
@@ -101,7 +106,7 @@ class ZerePyCLI:
                 name="load-agent",
                 description="Loads an agent from a file.",
                 tips=["Format: load-agent {agent_name}",
-                     "Use 'list-agents' to see available agents"],
+                      "Use 'list-agents' to see available agents"],
                 handler=self.load_agent,
                 aliases=['load']
             )
@@ -124,7 +129,7 @@ class ZerePyCLI:
                 name="list-actions",
                 description="Lists all available actions for the given connection.",
                 tips=["Format: list-actions {connection}",
-                     "Use 'list-connections' to see available connections"],
+                      "Use 'list-connections' to see available connections"],
                 handler=self.list_actions,
                 aliases=['actions', 'ls-actions']
             )
@@ -136,7 +141,7 @@ class ZerePyCLI:
                 name="configure-connection",
                 description="Sets up a connection for API access.",
                 tips=["Format: configure-connection {connection}",
-                     "Follow the prompts to enter necessary credentials"],
+                      "Follow the prompts to enter necessary credentials"],
                 handler=self.configure_connection,
                 aliases=['config', 'setup']
             )
@@ -222,10 +227,7 @@ class ZerePyCLI:
             except EOFError:
                 self.exit([])
             except Exception as e:
-                print(f"\nUnexpected error: {e}")
-                if os.getenv('ZEREPY_DEBUG'):
-                    import traceback
-                    traceback.print_exc()
+                logger.exception(f"Unexpected error: {e}") 
 
     def _handle_command(self, input_string: str) -> None:
         """Parse and handle a command input"""
@@ -239,19 +241,19 @@ class ZerePyCLI:
             else:
                 self._handle_unknown_command(command_string)
         except Exception as e:
-            print(f"\nError executing command: {e}")
+            logger.error(f"Error executing command: {e}")
 
     def _handle_unknown_command(self, command: str) -> None:
         """Handle unknown command with suggestions"""
-        print(f"\nUnknown command: '{command}'")
-        
+        logger.warning(f"Unknown command: '{command}'") 
+
         # Suggest similar commands using basic string similarity
         suggestions = self._get_command_suggestions(command)
         if suggestions:
-            print("Did you mean one of these?")
+            logger.info("Did you mean one of these?")
             for suggestion in suggestions:
-                print(f"  - {suggestion}")
-        print("\nUse 'help' to see all available commands.")
+                logger.info(f"  - {suggestion}")
+        logger.info("Use 'help' to see all available commands.")
 
     def _get_command_suggestions(self, command: str, max_suggestions: int = 3) -> List[str]:
         """Get command suggestions based on string similarity"""
@@ -261,10 +263,10 @@ class ZerePyCLI:
     def _print_welcome_message(self) -> None:
         """Print welcome message and initial status"""
         print_h_bar()
-        print("👋 Welcome to the ZerePy CLI!")
-        print("Type 'help' for a list of commands.")
+        logger.info("👋 Welcome to the ZerePy CLI!")
+        logger.info("Type 'help' for a list of commands.")
         self.list_connections([])
-        print_h_bar()
+        print_h_bar() 
 
     def help(self, input_list: List[str]) -> None:
         """Enhanced help command with better formatting"""
@@ -277,28 +279,28 @@ class ZerePyCLI:
         """Show help for a specific command"""
         command = self.commands.get(command_name)
         if not command:
-            print(f"\nUnknown command: '{command_name}'")
+            logger.warning(f"Unknown command: '{command_name}'")
             suggestions = self._get_command_suggestions(command_name)
             if suggestions:
-                print("\nDid you mean one of these?")
+                logger.info("Did you mean one of these?")
                 for suggestion in suggestions:
-                    print(f"  - {suggestion}")
+                    logger.info(f"  - {suggestion}")
             return
 
-        print(f"\nHelp for '{command.name}':")
-        print(f"Description: {command.description}")
+        logger.info(f"\nHelp for '{command.name}':")
+        logger.info(f"Description: {command.description}")
         
         if command.aliases:
-            print(f"Aliases: {', '.join(command.aliases)}")
+            logger.info(f"Aliases: {', '.join(command.aliases)}")
         
         if command.tips:
-            print("\nTips:")
+            logger.info("\nTips:")
             for tip in command.tips:
-                print(f"  - {tip}")
+                logger.info(f"  - {tip}")
 
     def _show_general_help(self) -> None:
         """Show general help information"""
-        print("\nAvailable Commands:")
+        logger.info("\nAvailable Commands:")
         # Group commands by first letter for better organization
         commands_by_letter = {}
         for cmd_name, cmd in self.commands.items():
@@ -310,37 +312,37 @@ class ZerePyCLI:
                 commands_by_letter[first_letter].append(cmd)
 
         for letter in sorted(commands_by_letter.keys()):
-            print(f"\n{letter}:")
+            logger.info(f"\n{letter}:")
             for cmd in sorted(commands_by_letter[letter], key=lambda x: x.name):
-                print(f"  {cmd.name:<15} - {cmd.description}")
+                logger.info(f"  {cmd.name:<15} - {cmd.description}")
 
         if self.agent:
-            print(f"\nCurrent Agent: {self.agent.name}")
+            logger.info(f"\nCurrent Agent: {self.agent.name}")
         else:
-            print("\nNo agent currently loaded")
+            logger.info("\nNo agent currently loaded")
 
     def exit(self, input_list: List[str]) -> None:
         """Exit the CLI gracefully"""
-        print("\nGoodbye! 👋")
+        logger.info("\nGoodbye! 👋")
         sys.exit(0)
 
     def agent_action(self, input_list: List[str]) -> None:
         """Handle agent action command"""
         if self.agent is None:
-            print("No agent is currently loaded. Use 'load-agent' to load an agent.")
+            logger.info("No agent is currently loaded. Use 'load-agent' to load an agent.")
             return
 
         if len(input_list) < 3:
-            print("Please specify both a connection and an action.")
-            print("Format: agent-action {connection} {action}")
+            logger.info("Please specify both a connection and an action.")
+            logger.info("Format: agent-action {connection} {action}")
             return
 
         connection_string = input_list[1]
         action_string = input_list[2]
 
         if not self.connection_manager.check_connection(connection_string):
-            print(f"Connection '{connection_string}' is not configured.")
-            print("Use 'configure-connection' to set it up.")
+            logger.warning(f"Connection '{connection_string}' is not configured.")
+            logger.info("Use 'configure-connection' to set it up.")
             return
 
         try:
@@ -349,49 +351,49 @@ class ZerePyCLI:
                 connection_string=connection_string,
                 input_list=input_list
             )
-            print("Result:", result)
+            logger.info(f"Result: {result}")
         except Exception as e:
-            print(f"Error running action: {e}")
+            logger.error(f"Error running action: {e}")
 
     def agent_loop(self, input_list: List[str]) -> None:
         """Handle agent loop command"""
         if self.agent is None:
-            print("No agent is currently loaded. Use 'load-agent' to load an agent.")
+            logger.info("No agent is currently loaded. Use 'load-agent' to load an agent.")
             return
 
-        print("\n🚀 Starting agent loop...")
-        print("Press Ctrl+C at any time to stop the loop.")
-        print_h_bar()
+        logger.info("\n🚀 Starting agent loop...")
+        logger.info("Press Ctrl+C at any time to stop the loop.")
+        print_h_bar() 
 
         try:
             self.agent.loop()
         except KeyboardInterrupt:
-            print("\n🛑 Agent loop stopped by user.")
+            logger.info("\n🛑 Agent loop stopped by user.")
         except Exception as e:
-            print(f"\nError in agent loop: {e}")
+            logger.error(f"Error in agent loop: {e}")
 
     def list_agents(self, input_list: List[str]) -> None:
         """Handle list agents command"""
-        print("\nAvailable Agents:")
+        logger.info("\nAvailable Agents:")
         agents_dir = Path("agents")
         if not agents_dir.exists():
-            print("No agents directory found.")
+            logger.info("No agents directory found.")
             return
 
         agents = list(agents_dir.glob("*.json"))
         if not agents:
-            print("No agents found. Use 'create-agent' to create a new agent.")
+            logger.info("No agents found. Use 'create-agent' to create a new agent.")
             return
 
         for agent_file in sorted(agents):
-            print(f"- {agent_file.stem}")
+            logger.info(f"- {agent_file.stem}")
 
     def load_agent(self, input_list: List[str]) -> None:
         """Handle load agent command"""
         if len(input_list) < 2:
-            print("Please specify an agent name.")
-            print("Format: load-agent {agent_name}")
-            print("Use 'list-agents' to see available agents.")
+            logger.info("Please specify an agent name.")
+            logger.info("Format: load-agent {agent_name}")
+            logger.info("Use 'list-agents' to see available agents.")
             return
 
         agent_name = input_list[1]
@@ -401,26 +403,26 @@ class ZerePyCLI:
                 agent_path=str(agent_path),
                 connection_manager=self.connection_manager
             )
-            print(f"\n✅ Successfully loaded agent: {self.agent.name}")
+            logger.info(f"\n✅ Successfully loaded agent: {self.agent.name}")
         except FileNotFoundError:
-            print(f"Agent file not found: {agent_name}")
-            print("Use 'list-agents' to see available agents.")
+            logger.error(f"Agent file not found: {agent_name}")
+            logger.info("Use 'list-agents' to see available agents.")
         except KeyError as e:
-            print(f"Invalid agent file: {e}")
+            logger.error(f"Invalid agent file: {e}")
         except Exception as e:
-            print(f"Error loading agent: {e}")
+            logger.error(f"Error loading agent: {e}")
 
     def create_agent(self, input_list: List[str]) -> None:
         """Handle create agent command"""
-        print("\nℹ️ Agent creation wizard not implemented yet.")
-        print("Please create agent JSON files manually in the 'agents' directory.")
+        logger.info("\nℹ️ Agent creation wizard not implemented yet.")
+        logger.info("Please create agent JSON files manually in the 'agents' directory.")
 
     def list_actions(self, input_list: List[str]) -> None:
         """Handle list actions command"""
         if len(input_list) < 2:
-            print("\nPlease specify a connection.")
-            print("Format: list-actions {connection}")
-            print("Use 'list-connections' to see available connections.")
+            logger.info("\nPlease specify a connection.")
+            logger.info("Format: list-actions {connection}")
+            logger.info("Use 'list-connections' to see available connections.")
             return
 
         connection_string = input_list[1]
@@ -433,9 +435,9 @@ class ZerePyCLI:
     def configure_connection(self, input_list: List[str]) -> None:
         """Handle configure connection command"""
         if len(input_list) < 2:
-            print("\nPlease specify a connection to configure.")
-            print("Format: configure-connection {connection}")
-            print("Use 'list-connections' to see available connections.")
+            logger.info("\nPlease specify a connection to configure.")
+            logger.info("Format: configure-connection {connection}")
+            logger.info("Use 'list-connections' to see available connections.")
             return
 
         connection_string = input_list[1]
