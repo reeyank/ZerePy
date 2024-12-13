@@ -1,10 +1,27 @@
 import json
 import os
+import logging
+from typing import Dict, Any
 from dotenv import set_key, load_dotenv
 from requests_oauthlib import OAuth1Session
 from src.connections.base_connection import BaseConnection
 from src.helpers import print_h_bar
 import tweepy
+
+# Configure module logger
+logger = logging.getLogger(__name__)
+
+class TwitterConnectionError(Exception):
+    """Base exception for Twitter connection errors"""
+    pass
+
+class TwitterConfigurationError(TwitterConnectionError):
+    """Raised when there are configuration/credential issues"""
+    pass
+
+class TwitterAPIError(TwitterConnectionError):
+    """Raised when Twitter API requests fail"""
+    pass
 
 class TwitterConnection(BaseConnection):
     def __init__(self):
@@ -32,201 +49,267 @@ class TwitterConnection(BaseConnection):
                 "args": {"tweet_id": "str", "message": "str"},
             }
         }
+        logger.debug("TwitterConnection initialized")
 
-    def perform_action(self, action_name: str, **kwargs):
-        """Implementation of abstract method from BaseConnection"""
-        if action_name in self.actions:
-            return self.actions[action_name]["func"](**kwargs)
-        raise Exception(f"Unknown action: {action_name}")
+    def _make_request(self, method: str, endpoint: str, **kwargs) -> dict:
+        """
+        Make a request to the Twitter API with error handling
+        
+        Args:
+            method: HTTP method ('get', 'post', etc.)
+            endpoint: API endpoint path
+            **kwargs: Additional request parameters
+            
+        Returns:
+            Dict containing the API response
+        """
+        logger.debug(f"Making {method.upper()} request to {endpoint}")
+        try:
+            oauth = self._get_oauth()
+            full_url = f"https://api.twitter.com/2/{endpoint.lstrip('/')}"
+            
+            response = getattr(oauth, method.lower())(full_url, **kwargs)
+            expected_status = 201 if method.lower() == 'post' else 200
+            
+            if response.status_code != expected_status:
+                logger.error(f"Request failed: {response.status_code} - {response.text}")
+                raise TwitterAPIError(
+                    f"Request failed with status {response.status_code}: {response.text}"
+                )
+            
+            logger.debug(f"Request successful: {response.status_code}")
+            return response.json()
+            
+        except Exception as e:
+            logger.error(f"API request failed: {str(e)}")
+            if isinstance(e, TwitterAPIError):
+                raise
+            raise TwitterAPIError(f"API request failed: {str(e)}")
+
+    def _get_credentials(self) -> Dict[str, str]:
+        """Get Twitter credentials from environment with validation"""
+        logger.debug("Retrieving Twitter credentials")
+        load_dotenv()
+        
+        required_vars = {
+            'TWITTER_CONSUMER_KEY': 'consumer key',
+            'TWITTER_CONSUMER_SECRET': 'consumer secret', 
+            'TWITTER_ACCESS_TOKEN': 'access token',
+            'TWITTER_ACCESS_TOKEN_SECRET': 'access token secret',
+            'TWITTER_USER_ID': 'user ID'
+        }
+        
+        credentials = {}
+        missing = []
+        
+        for env_var, description in required_vars.items():
+            value = os.getenv(env_var)
+            if not value:
+                missing.append(description)
+            credentials[env_var] = value
+                
+        if missing:
+            error_msg = f"Missing Twitter credentials: {', '.join(missing)}"
+            logger.error(error_msg)
+            raise TwitterConfigurationError(error_msg)
+        
+        logger.debug("All required credentials found")
+        return credentials
 
     def _get_oauth(self) -> OAuth1Session:
         """Get or create OAuth session using stored credentials"""
         if self._oauth_session is None:
-            load_dotenv()
-            consumer_key = os.getenv("TWITTER_CONSUMER_KEY")
-            consumer_secret = os.getenv("TWITTER_CONSUMER_SECRET")
-            access_token = os.getenv("TWITTER_ACCESS_TOKEN")
-            access_token_secret = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
-
-            if not all([consumer_key, consumer_secret, access_token, access_token_secret]):
-                raise ValueError("Missing required Twitter credentials in environment")
-
-            self._oauth_session = OAuth1Session(
-                consumer_key,
-                client_secret=consumer_secret,
-                resource_owner_key=access_token,
-                resource_owner_secret=access_token_secret,
-            )
+            logger.debug("Creating new OAuth session")
+            try:
+                credentials = self._get_credentials()
+                self._oauth_session = OAuth1Session(
+                    credentials['TWITTER_CONSUMER_KEY'],
+                    client_secret=credentials['TWITTER_CONSUMER_SECRET'],
+                    resource_owner_key=credentials['TWITTER_ACCESS_TOKEN'],
+                    resource_owner_secret=credentials['TWITTER_ACCESS_TOKEN_SECRET'],
+                )
+                logger.debug("OAuth session created successfully")
+            except Exception as e:
+                logger.error(f"Failed to create OAuth session: {str(e)}")
+                raise
 
         return self._oauth_session
 
+    def _validate_tweet_text(self, text: str, context: str = "Tweet") -> None:
+        """Validate tweet text meets Twitter requirements"""
+        if not text:
+            error_msg = f"{context} text cannot be empty"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        if len(text) > 280:
+            error_msg = f"{context} exceeds 280 character limit"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+        logger.debug(f"Tweet text validation passed for {context.lower()}")
 
-    def configure(self):
+    def perform_action(self, action_name: str, **kwargs) -> Any:
+        """Implementation of abstract method from BaseConnection"""
+        logger.debug(f"Performing action: {action_name}")
+        if action_name in self.actions:
+            return self.actions[action_name]["func"](**kwargs)
+        error_msg = f"Unknown action: {action_name}"
+        logger.error(error_msg)
+        raise TwitterConnectionError(error_msg)
+
+    def configure(self) -> None:
         """Sets up Twitter API authentication"""
-        print("\n🐦 TWITTER AUTHENTICATION SETUP")
-
-        # Check if config already exists
+        logger.info("Starting Twitter authentication setup")
+        
+        # Check existing configuration
         if self.is_configured(verbose=False):
-            print("\nTwitter API is already configured.")
+            logger.info("Twitter API is already configured")
             response = input("Do you want to reconfigure? (y/n): ")
             if response.lower() != 'y':
                 return
 
-        # Guide user through getting API credentials
-        print("\n📝 To get your Twitter API credentials:")
-        print("1. Go to https://developer.twitter.com/en/portal/dashboard")
-        print("2. Create a new project and app if you haven't already")
-        print("3. In your app settings, enable OAuth 1.0a with read and write permissions")
-        print("4. Get your API Key (consumer key) and API Key Secret (consumer secret)")
+        setup_instructions = [
+            "\n🐦 TWITTER AUTHENTICATION SETUP",
+            "\n📝 To get your Twitter API credentials:",
+            "1. Go to https://developer.twitter.com/en/portal/dashboard",
+            "2. Create a new project and app if you haven't already",
+            "3. In your app settings, enable OAuth 1.0a with read and write permissions",
+            "4. Get your API Key (consumer key) and API Key Secret (consumer secret)"
+        ]
+        logger.info("\n".join(setup_instructions))
         print_h_bar()
 
-        # Get account details
-        print("\nPlease enter your Twitter API credentials:")
-        username = input("Enter your Twitter username (without @): ")
-        consumer_key = input("Enter your API Key (consumer key): ")
-        consumer_secret = input("Enter your API Key Secret (consumer secret): ")
-
-        # Start OAuth process
-        print("\nStarting OAuth authentication process...")
-
         try:
-            # Get request token
+            # Get account details
+            logger.info("\nPlease enter your Twitter API credentials:")
+            credentials = {
+                'username': input("Enter your Twitter username (without @): "),
+                'consumer_key': input("Enter your API Key (consumer key): "),
+                'consumer_secret': input("Enter your API Key Secret (consumer secret): ")
+            }
+
+            logger.info("Starting OAuth authentication process...")
+
+            # Initialize OAuth flow
             request_token_url = "https://api.twitter.com/oauth/request_token?oauth_callback=oob&x_auth_access_type=write"
-            oauth = OAuth1Session(consumer_key, client_secret=consumer_secret)
+            oauth = OAuth1Session(credentials['consumer_key'], client_secret=credentials['consumer_secret'])
 
             try:
                 fetch_response = oauth.fetch_request_token(request_token_url)
-            except ValueError:
-                print("\n❌ Error: There may be an issue with your consumer key or secret.")
-                return
-
-            resource_owner_key = fetch_response.get("oauth_token")
-            resource_owner_secret = fetch_response.get("oauth_token_secret")
+            except ValueError as e:
+                logger.error("Failed to fetch request token")
+                raise TwitterConfigurationError("Invalid consumer key or secret") from e
 
             # Get authorization
             base_authorization_url = "https://api.twitter.com/oauth/authorize"
             authorization_url = oauth.authorization_url(base_authorization_url)
 
-            print("\n1. Please visit this URL to authorize the application:")
-            print(authorization_url)
-            print("\n2. After authorizing, Twitter will give you a PIN code.")
+            auth_instructions = [
+                "\n1. Please visit this URL to authorize the application:",
+                authorization_url,
+                "\n2. After authorizing, Twitter will give you a PIN code."
+            ]
+            logger.info("\n".join(auth_instructions))
+            
             verifier = input("3. Please enter the PIN code here: ")
 
-            # Get the access token
+            # Get access token
             access_token_url = "https://api.twitter.com/oauth/access_token"
             oauth = OAuth1Session(
-                consumer_key,
-                client_secret=consumer_secret,
-                resource_owner_key=resource_owner_key,
-                resource_owner_secret=resource_owner_secret,
-                verifier=verifier,
+                credentials['consumer_key'],
+                client_secret=credentials['consumer_secret'],
+                resource_owner_key=fetch_response.get('oauth_token'),
+                resource_owner_secret=fetch_response.get('oauth_token_secret'),
+                verifier=verifier
             )
 
             oauth_tokens = oauth.fetch_access_token(access_token_url)
-
-            access_token = oauth_tokens.get("oauth_token")
-            access_token_secret = oauth_tokens.get("oauth_token_secret")
-
-            # Create new OAuth session with final credentials to get user ID
-            self._oauth_session = OAuth1Session(
-                consumer_key,
-                client_secret=consumer_secret,
-                resource_owner_key=access_token,
-                resource_owner_secret=access_token_secret,
-            )
-
-            # Get numeric user ID using Twitter API
-            try:
-                user_id = self.get_user_id_from_username(username)
-            except Exception as e:
-                print(f"\n❌ Error getting user ID: {str(e)}")
-                print("Using username as fallback...")
-                user_id = username
-
-            # Save everything to .env file
+            
+            # Save credentials
             if not os.path.exists('.env'):
+                logger.debug("Creating new .env file")
                 with open('.env', 'w') as f:
                     f.write('')
 
-            set_key('.env', 'TWITTER_USERNAME', username)
-            set_key('.env', 'TWITTER_USER_ID', user_id)
-            set_key('.env', 'TWITTER_CONSUMER_KEY', consumer_key)
-            set_key('.env', 'TWITTER_CONSUMER_SECRET', consumer_secret)
-            set_key('.env', 'TWITTER_ACCESS_TOKEN', access_token)
-            set_key('.env', 'TWITTER_ACCESS_TOKEN_SECRET', access_token_secret)
+            try:
+                user_id = self.get_user_id_from_username(credentials['username'])
+            except Exception as e:
+                logger.warning(f"Failed to get user ID: {str(e)}")
+                logger.info("Using username as fallback")
+                user_id = credentials['username']
 
-            print("\n✅ Twitter authentication successfully set up!")
-            print("Your API keys, secrets, username, and user ID have been stored in the .env file.")
+            # Save to .env
+            env_vars = {
+                'TWITTER_USERNAME': credentials['username'],
+                'TWITTER_USER_ID': user_id,
+                'TWITTER_CONSUMER_KEY': credentials['consumer_key'],
+                'TWITTER_CONSUMER_SECRET': credentials['consumer_secret'],
+                'TWITTER_ACCESS_TOKEN': oauth_tokens.get('oauth_token'),
+                'TWITTER_ACCESS_TOKEN_SECRET': oauth_tokens.get('oauth_token_secret')
+            }
+
+            for key, value in env_vars.items():
+                set_key('.env', key, value)
+                logger.debug(f"Saved {key} to .env")
+
+            logger.info("\n✅ Twitter authentication successfully set up!")
+            logger.info("Your API keys, secrets, username, and user ID have been stored in the .env file.")
 
         except Exception as e:
-            print(f"\n❌ An error occurred during setup: {str(e)}")
-            return
+            error_msg = f"Setup failed: {str(e)}"
+            logger.error(error_msg)
+            raise TwitterConfigurationError(error_msg)
 
     def is_configured(self, verbose=True) -> bool:
-        """Checks if Twitter credentials are configured and valid"""
-        if not os.path.exists('.env'):
-            return False
-            
+        """Check if Twitter credentials are configured and valid"""
+        logger.debug("Checking Twitter configuration status")
         try:
-            # Load env variables
-            load_dotenv()
-            consumer_key = os.getenv('TWITTER_CONSUMER_KEY')
-            consumer_secret = os.getenv('TWITTER_CONSUMER_SECRET')
-            access_token = os.getenv('TWITTER_ACCESS_TOKEN')
-            access_token_secret = os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
-            user_id = os.getenv('TWITTER_USER_ID')
-
-            # Check if values present
-            if not all([consumer_key, consumer_secret, access_token, access_token_secret, user_id]):
-                return False
+            credentials = self._get_credentials()
             
-            # Initialize tweepy client
+            # Initialize client and validate credentials
             client = tweepy.Client(
-                consumer_key=consumer_key,
-                consumer_secret=consumer_secret,
-                access_token=access_token,
-                access_token_secret=access_token_secret
+                consumer_key=credentials['TWITTER_CONSUMER_KEY'],
+                consumer_secret=credentials['TWITTER_CONSUMER_SECRET'],
+                access_token=credentials['TWITTER_ACCESS_TOKEN'],
+                access_token_secret=credentials['TWITTER_ACCESS_TOKEN_SECRET']
             )
             
-            # Try to make a minimal API call to validate credentials
-            # Get the authenticated user's information
             client.get_me()
-            
-            # If we get here, the credentials are valid
+            logger.debug("Twitter configuration is valid")
             return True
             
         except Exception as e:
             if verbose:
-                print("❌ There was an error validating your Twitter credentials:", e)
+                error_msg = str(e)
+                if isinstance(e, TwitterConfigurationError):
+                    error_msg = f"Configuration error: {error_msg}"
+                elif isinstance(e, TwitterAPIError):
+                    error_msg = f"API validation error: {error_msg}"
+                logger.error(f"Configuration validation failed: {error_msg}")
             return False
 
     def get_user_id_from_username(self, username: str) -> str:
-        """
-        Get the numeric user ID for a given Twitter username using the Twitter API v2
-        """
-        params = {"usernames": username}
-        response = self._get_oauth().get(
-            "https://api.twitter.com/2/users/by",
-            params=params
+        """Get the numeric user ID for a given Twitter username"""
+        logger.debug(f"Getting user ID for username: {username}")
+        response = self._make_request(
+            'get',
+            'users/by',
+            params={"usernames": username}
         )
-
-        if response.status_code != 200:
-            raise Exception(
-                f"Request returned an error: {response.status_code} {response.text}"
-            )
-
-        json_response = response.json()
-        if not json_response.get("data"):
-            raise Exception(f"No user found for username: {username}")
+        
+        if not response.get("data"):
+            error_msg = f"No user found for username: {username}"
+            logger.error(error_msg)
+            raise TwitterAPIError(error_msg)
             
-        return json_response["data"][0]["id"]
+        user_id = response["data"][0]["id"]
+        logger.debug(f"Found user ID: {user_id}")
+        return user_id
 
     def read_timeline(self, count=10, **kwargs) -> list:
         """Read tweets from the user's timeline"""
-        user_id = os.getenv("TWITTER_USER_ID")
-        if not user_id:
-            raise ValueError("TWITTER_USER_ID not found in environment variables.")
-
+        logger.debug(f"Reading timeline, count: {count}")
+        credentials = self._get_credentials()
+        
         params = {
             "tweet.fields": "created_at,author_id,attachments",
             "expansions": "author_id",
@@ -234,165 +317,98 @@ class TwitterConnection(BaseConnection):
             "max_results": count
         }
 
-        response = self._get_oauth().get(
-            f"https://api.twitter.com/2/users/{user_id}/timelines/reverse_chronological",
+        response = self._make_request(
+            'get',
+            f"users/{credentials['TWITTER_USER_ID']}/timelines/reverse_chronological",
             params=params
         )
 
-        if response.status_code != 200:
-            raise Exception(
-                f"Request returned an error: {response.status_code} {response.text}"
-            )
+        tweets = response.get("data", [])
+        user_info = response.get("includes", {}).get("users", [])
 
-        json_response = response.json()
-        tweets = json_response.get("data", [])
-        user_info = json_response.get("includes", {}).get("users", [])
+        # Process user information
+        user_dict = {
+            user['id']: {
+                'name': user['name'],
+                'username': user['username']
+            } for user in user_info
+        }
 
-        # Map author_id to user information
-        user_dict = {user['id']: {'name': user['name'], 'username': user['username']} for user in user_info}
-
-        # Add user information to the tweets
+        # Enrich tweets with user information
         for tweet in tweets:
             author_id = tweet['author_id']
-            if author_id in user_dict:
-                tweet['author_name'] = user_dict[author_id]['name']
-                tweet['author_username'] = user_dict[author_id]['username']
-            else:
-                tweet['author_name'] = "Unknown"
-                tweet['author_username'] = "Unknown"
+            author_info = user_dict.get(author_id, {'name': "Unknown", 'username': "Unknown"})
+            tweet.update({
+                'author_name': author_info['name'],
+                'author_username': author_info['username']
+            })
 
+        logger.debug(f"Retrieved {len(tweets)} tweets")
         return tweets
 
-    def get_latest_tweets(self, username: str, count: int = 10, **kwargs):
-        """
-        Get latest tweets for a user
+    def get_latest_tweets(self, username: str, count: int = 10, **kwargs) -> list:
+        """Get latest tweets for a user"""
+        logger.debug(f"Getting latest tweets for {username}, count: {count}")
         
-        Args:
-            username (str): Twitter username to fetch tweets from
-            count (int): Number of tweets to retrieve (default: 10)
-            
-        Returns:
-            list: List of tweet objects containing tweet data
-            
-        Raises:
-            Exception: If API request fails or credentials are invalid
-        """
-        try:
-            user_id = self.get_user_id_from_username(username)
-        except Exception as e:
-            raise Exception(f"Failed to get user ID for username {username}: {str(e)}")
-
+        user_id = self.get_user_id_from_username(username)
+        
         params = {
             "tweet.fields": "created_at,public_metrics,text",
-            "max_results": min(count, 100),  # API limit is 100
+            "max_results": min(count, 100),
             "exclude": "retweets,replies"
         }
 
-        response = self._get_oauth().get(
-            f"https://api.twitter.com/2/users/{user_id}/tweets",
+        response = self._make_request(
+            'get',
+            f"users/{user_id}/tweets",
             params=params
         )
 
-        if response.status_code != 200:
-            raise Exception(
-                f"Request returned an error: {response.status_code} {response.text}"
-            )
+        tweets = response.get("data", [])
+        logger.debug(f"Retrieved {len(tweets)} tweets")
+        return tweets
 
-        json_response = response.json()
-        return json_response.get("data", [])
-
-    def post_tweet(self, message: str, **kwargs):
-        """
-        Post a new tweet
+    def post_tweet(self, message: str, **kwargs) -> dict:
+        """Post a new tweet"""
+        logger.debug("Posting new tweet")
+        self._validate_tweet_text(message)
         
-        Args:
-            message (str): The tweet content to post
-            
-        Returns:
-            dict: Response from Twitter API containing tweet data
-            
-        Raises:
-            Exception: If API request fails or credentials are invalid
-            ValueError: If message exceeds Twitter's character limit
-        """
-        if len(message) > 280:
-            raise ValueError("Tweet exceeds 280 character limit")
-
-        response = self._get_oauth().post(
-            "https://api.twitter.com/2/tweets",
-            json={"text": message}
+        response = self._make_request(
+            'post',
+            'tweets',
+            json={'text': message}
         )
-
-        if response.status_code != 201:
-            raise Exception(
-                f"Request returned an error: {response.status_code} {response.text}"
-            )
-
-        return response.json()
-
-    def reply_to_tweet(self, tweet_id: str, message: str, **kwargs):
-        """
-        Reply to a tweet
         
-        Args:
-            tweet_id (str): ID of the tweet to reply to
-            message (str): The reply message content
-            
-        Returns:
-            dict: Response from Twitter API containing reply tweet data
-            
-        Raises:
-            Exception: If API request fails or credentials are invalid
-            ValueError: If message exceeds Twitter's character limit
-        """
-        if len(message) > 280:
-            raise ValueError("Reply exceeds 280 character limit")
+        logger.info("Tweet posted successfully")
+        return response
 
-        # Create payload with reply metadata
-        payload = {
-            "text": message,
-            "reply": {
-                "in_reply_to_tweet_id": tweet_id
+    def reply_to_tweet(self, tweet_id: str, message: str, **kwargs) -> dict:
+        """Reply to an existing tweet"""
+        logger.debug(f"Replying to tweet {tweet_id}")
+        self._validate_tweet_text(message, "Reply")
+        
+        response = self._make_request(
+            'post',
+            'tweets',
+            json={
+                'text': message,
+                'reply': {'in_reply_to_tweet_id': tweet_id}
             }
-        }
-
-        response = self._get_oauth().post(
-            "https://api.twitter.com/2/tweets",
-            json=payload
         )
-
-        if response.status_code != 201:
-            raise Exception(
-                f"Request returned an error: {response.status_code} {response.text}"
-            )
-
-        return response.json()
-
-    def like_tweet(self, tweet_id: str, **kwargs):
-        """
-        Like a tweet
         
-        Args:
-            tweet_id (str): ID of the tweet to like
-            
-        Returns:
-            dict: Response from Twitter API containing like data
-            
-        Raises:
-            Exception: If API request fails or credentials are invalid
-        """
-        user_id = os.getenv("TWITTER_USER_ID")
-        if not user_id:
-            raise ValueError("TWITTER_USER_ID not found in environment variables.")
+        logger.info("Reply posted successfully")
+        return response
 
-        response = self._get_oauth().post(
-            f"https://api.twitter.com/2/users/{user_id}/likes",
-            json={"tweet_id": tweet_id}
+    def like_tweet(self, tweet_id: str, **kwargs) -> dict:
+        """Like a tweet"""
+        logger.debug(f"Liking tweet {tweet_id}")
+        credentials = self._get_credentials()
+        
+        response = self._make_request(
+            'post',
+            f"users/{credentials['TWITTER_USER_ID']}/likes",
+            json={'tweet_id': tweet_id}
         )
-
-        if response.status_code != 200:
-            raise Exception(
-                f"Request returned an error: {response.status_code} {response.text}"
-            )
-
-        return response.json()
+        
+        logger.info("Tweet liked successfully")
+        return response
