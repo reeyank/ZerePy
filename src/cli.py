@@ -1,277 +1,442 @@
 import os
 import sys
+from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional
+from pathlib import Path
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.styles import Style
 from prompt_toolkit.formatted_text import HTML
-from prompt_toolkit.history import InMemoryHistory
+from prompt_toolkit.history import FileHistory
 from src.agent import load_agent_from_file
 from src.helpers import print_h_bar
 from src.connection_manager import ConnectionManager
 
+@dataclass
+class Command:
+    """Dataclass to represent a CLI command"""
+    name: str
+    description: str
+    tips: List[str]
+    handler: Callable
+    aliases: List[str] = None
+
+    def __post_init__(self):
+        if self.aliases is None:
+            self.aliases = []
+
 class ZerePyCLI:
     def __init__(self):
-        # Initialize CLI parameters
         self.agent = None
         self.connection_manager = ConnectionManager()
-        self.commands = {
-            "help": {
-                "command": "help",
-                "description": "Displays a list of all available commands, or the help for a specific command.",
-                "tips": ["Try 'help' to see available commands.",
-                         "Try 'help {command}' to get more information about a specific command (e.g. 'help load_agent')."],
-                "func": self.help
-            },
-            "agent_action": {
-                "command": "agent_action",
-                "description": "Runs a single agent action.",
-                "tips": ["You must give the name of a connection and an action like so: 'agent_action {connection} {action}'.",
-                         "You can use the 'list_connections' command to see all available connections.",
-                         "You can use the 'list_actions' command to see all available actions for a given connection."],
-                "func": self.agent_action
-            },
-            "agent_loop": {
-                "command": "agent_loop",
-                "description": "Starts the current agent's autonomous behavior loop.",
-                "tips": [],
-                "func": self.agent_loop
-            },
-            "list_agents": {
-                "command": "list_agents",
-                "description": "Lists all available agents you have on file.",
-                "tips": ["You can load any available agent with the 'load_agent' command."],
-                "func": self.list_agents
-            },
-            "load_agent": {
-                "command": "load_agent",
-                "description": "Loads an agent from a file.",
-                "tips": ["You can list all available agents with the 'list_agents' command.",
-                         "You do not need to specify the '.json' extension."],
-                "func": self.load_agent
-            },
-            "exit": {
-                "command": "exit",
-                "description": "Exits the ZerePy CLI.",
-                "tips": [],
-                "func": self.exit
-            },
-            "create_agent": {
-                "command": "create_agent",
-                "description": "Creates a new agent.",
-                "tips": [],
-                "func": self.create_agent
-            },
-            "list_actions": {
-                "command": "list_actions",
-                "description": "Lists all available actions for the given connection.",
-                "tips": [
-                    "You must give the name of a connection like so: 'list_actions twitter'.",
-                    "You can use the 'list_connections' command to see all available connections.",
-                ],
-                "func": self.list_actions
-            },
-            "configure_connection": {
-                "command": "configure_connection",
-                "description": "Sets up the given connection so that your agents can use the API.",
-                "tips": [
-                    "Each connection requires different credentials. You will be prompted for the necessary credentials.",
-                    "You must give the name of a connection like so: 'configure_connection twitter'.",
-                ],
-                "func": self.configure_connection
-            },
-            "list_connections": {
-                "command": "list_connections",
-                "description": "Lists all available connections.",
-                "tips": [],
-                "func": self.list_connections
-            }
-        }
+        
+        # Create config directory if it doesn't exist
+        self.config_dir = Path.home() / '.zerepy'
+        self.config_dir.mkdir(exist_ok=True)
+        
+        # Initialize command registry
+        self._initialize_commands()
+        
+        # Setup prompt toolkit components
+        self._setup_prompt_toolkit()
+        
+        # Start CLI
+        self.main_loop()
 
-        # Initialize prompt toolkit style
+    def _initialize_commands(self) -> None:
+        """Initialize all CLI commands"""
+        self.commands: Dict[str, Command] = {}
+        
+        # Help command
+        self._register_command(
+            Command(
+                name="help",
+                description="Displays a list of all available commands, or help for a specific command.",
+                tips=["Try 'help' to see available commands.",
+                     "Try 'help {command}' to get more information about a specific command."],
+                handler=self.help,
+                aliases=['h', '?']
+            )
+        )
+        
+        # Agent action command
+        self._register_command(
+            Command(
+                name="agent-action",
+                description="Runs a single agent action.",
+                tips=["Format: agent-action {connection} {action}",
+                     "Use 'list-connections' to see available connections.",
+                     "Use 'list-actions' to see available actions."],
+                handler=self.agent_action,
+                aliases=['action', 'run']
+            )
+        )
+        
+        # Agent loop command
+        self._register_command(
+            Command(
+                name="agent-loop",
+                description="Starts the current agent's autonomous behavior loop.",
+                tips=["Press Ctrl+C to stop the loop"],
+                handler=self.agent_loop,
+                aliases=['loop', 'start']
+            )
+        )
+        
+        # List agents command
+        self._register_command(
+            Command(
+                name="list-agents",
+                description="Lists all available agents you have on file.",
+                tips=["Agents are stored in the 'agents' directory",
+                     "Use 'load-agent' to load an available agent"],
+                handler=self.list_agents,
+                aliases=['agents', 'ls-agents']
+            )
+        )
+        
+        # Load agent command
+        self._register_command(
+            Command(
+                name="load-agent",
+                description="Loads an agent from a file.",
+                tips=["Format: load-agent {agent_name}",
+                     "Use 'list-agents' to see available agents"],
+                handler=self.load_agent,
+                aliases=['load']
+            )
+        )
+        
+        # Create agent command
+        self._register_command(
+            Command(
+                name="create-agent",
+                description="Creates a new agent.",
+                tips=["Follow the interactive wizard to create a new agent"],
+                handler=self.create_agent,
+                aliases=['new-agent', 'create']
+            )
+        )
+        
+        # List actions command
+        self._register_command(
+            Command(
+                name="list-actions",
+                description="Lists all available actions for the given connection.",
+                tips=["Format: list-actions {connection}",
+                     "Use 'list-connections' to see available connections"],
+                handler=self.list_actions,
+                aliases=['actions', 'ls-actions']
+            )
+        )
+        
+        # Configure connection command
+        self._register_command(
+            Command(
+                name="configure-connection",
+                description="Sets up a connection for API access.",
+                tips=["Format: configure-connection {connection}",
+                     "Follow the prompts to enter necessary credentials"],
+                handler=self.configure_connection,
+                aliases=['config', 'setup']
+            )
+        )
+        
+        # List connections command
+        self._register_command(
+            Command(
+                name="list-connections",
+                description="Lists all available connections.",
+                tips=["Shows both configured and unconfigured connections"],
+                handler=self.list_connections,
+                aliases=['connections', 'ls-connections']
+            )
+        )
+        
+        # Exit command
+        self._register_command(
+            Command(
+                name="exit",
+                description="Exits the ZerePy CLI.",
+                tips=["You can also use Ctrl+D to exit"],
+                handler=self.exit,
+                aliases=['quit', 'q']
+            )
+        )
+
+    def _register_command(self, command: Command) -> None:
+        """Register a command and its aliases"""
+        self.commands[command.name] = command
+        for alias in command.aliases:
+            self.commands[alias] = command
+
+    def _setup_prompt_toolkit(self) -> None:
+        """Setup prompt toolkit components"""
         self.style = Style.from_dict({
             'prompt': 'ansicyan bold',
             'command': 'ansigreen',
             'error': 'ansired bold',
+            'success': 'ansigreen bold',
+            'warning': 'ansiyellow',
         })
 
-        # Create command completer
-        self.command_completer = WordCompleter(list(self.commands.keys()), ignore_case=True)
+        # Use FileHistory for persistent command history
+        history_file = self.config_dir / 'history.txt'
         
-        # Initialize prompt session with history
+        self.completer = WordCompleter(
+            list(self.commands.keys()), 
+            ignore_case=True,
+            sentence=True
+        )
+        
         self.session = PromptSession(
-            completer=self.command_completer,
+            completer=self.completer,
             style=self.style,
-            history=InMemoryHistory()
+            history=FileHistory(str(history_file))
         )
 
-        # Start CLI
-        self.main_loop()
+    def get_prompt_message(self) -> HTML:
+        """Generate the prompt message based on current state"""
+        agent_status = f"({self.agent.name})" if self.agent else "(no agent)"
+        return HTML(f'<prompt>ZerePy-CLI</prompt> {agent_status} > ')
 
-    def get_prompt_message(self):
-        if self.agent is None:
-            return HTML('<prompt>ZerePy-CLI</prompt> (no agent) > ')
-        return HTML(f'<prompt>ZerePy-CLI</prompt> ({self.agent.name}) > ')
-
-    def main_loop(self):
-        # Send welcome message first
-        print_h_bar()
-        print("👋 Hello! Welcome to the ZerePy CLI!")
-        # Check connections status once at startup
-        self.list_connections([])
-        print_h_bar()
-
+    def main_loop(self) -> None:
+        """Main CLI loop"""
+        self._print_welcome_message()
+        
         while True:
             try:
-                # Get input using prompt_toolkit
                 input_string = self.session.prompt(
                     self.get_prompt_message(),
                     style=self.style
-                )
+                ).strip()
 
-                # Get command from input
-                input_list = input_string.split()
-                if not input_list:  # Handle empty input
+                if not input_string:
                     continue
-                command_string = str(input_list[0])
 
-                # Run command
-                try:
-                    # Match command string to a supported command
-                    command_dict = self.commands[command_string]
-                    command_func = command_dict["func"]
-                    # Run command function
-                    command_func(input_list)
-                except KeyError:
-                    print("\nUnknown command. Try 'help' to see available commands.")
-                except Exception as e:
-                    print(f"\nAn error occurred: {e}")
-
-                # Add separator before next command
+                self._handle_command(input_string)
                 print_h_bar()
 
             except KeyboardInterrupt:
                 continue
             except EOFError:
                 self.exit([])
-
-    # [Rest of the methods remain the same as in the previous version]
-    def help(self, input_list):
-        help_arg_string = ""
-        if len(input_list) > 1:
-            help_arg_string = str(input_list[1])
-
-        if help_arg_string != "":
-            try:
-                command_dict = self.commands[help_arg_string]
-                command_description = command_dict["description"]
-                print(f"\nHELP FOR '{help_arg_string}':")
-                print(command_description)
-                for tip in command_dict["tips"]:
-                    print(f"- {tip}")
-            except (IndexError, KeyError):
-                print("Unknown command. Try 'help' to see available commands.")
             except Exception as e:
-                print(f"An error occurred: {e}")
-        else:
-            print("\nAVAILABLE CLI COMMANDS:")
-            for command in self.commands:
-                print(f"- {command}")
+                print(f"\nUnexpected error: {e}")
+                if os.getenv('ZEREPY_DEBUG'):
+                    import traceback
+                    traceback.print_exc()
 
-            if self.agent is None:
-                print("\nCURRENT AGENT: None")
+    def _handle_command(self, input_string: str) -> None:
+        """Parse and handle a command input"""
+        input_list = input_string.split()
+        command_string = input_list[0].lower()
+
+        try:
+            command = self.commands.get(command_string)
+            if command:
+                command.handler(input_list)
             else:
-                print(f"\nCURRENT AGENT: {self.agent.name}")
+                self._handle_unknown_command(command_string)
+        except Exception as e:
+            print(f"\nError executing command: {e}")
 
-            print("\nDOCS: https://zerepy.com/docs")
+    def _handle_unknown_command(self, command: str) -> None:
+        """Handle unknown command with suggestions"""
+        print(f"\nUnknown command: '{command}'")
+        
+        # Suggest similar commands using basic string similarity
+        suggestions = self._get_command_suggestions(command)
+        if suggestions:
+            print("Did you mean one of these?")
+            for suggestion in suggestions:
+                print(f"  - {suggestion}")
+        print("\nUse 'help' to see all available commands.")
 
-    def exit(self, input_list):
+    def _get_command_suggestions(self, command: str, max_suggestions: int = 3) -> List[str]:
+        """Get command suggestions based on string similarity"""
+        from difflib import get_close_matches
+        return get_close_matches(command, self.commands.keys(), n=max_suggestions, cutoff=0.6)
+
+    def _print_welcome_message(self) -> None:
+        """Print welcome message and initial status"""
+        print_h_bar()
+        print("👋 Welcome to the ZerePy CLI!")
+        print("Type 'help' for a list of commands.")
+        self.list_connections([])
+        print_h_bar()
+
+    def help(self, input_list: List[str]) -> None:
+        """Enhanced help command with better formatting"""
+        if len(input_list) > 1:
+            self._show_command_help(input_list[1])
+        else:
+            self._show_general_help()
+
+    def _show_command_help(self, command_name: str) -> None:
+        """Show help for a specific command"""
+        command = self.commands.get(command_name)
+        if not command:
+            print(f"\nUnknown command: '{command_name}'")
+            suggestions = self._get_command_suggestions(command_name)
+            if suggestions:
+                print("\nDid you mean one of these?")
+                for suggestion in suggestions:
+                    print(f"  - {suggestion}")
+            return
+
+        print(f"\nHelp for '{command.name}':")
+        print(f"Description: {command.description}")
+        
+        if command.aliases:
+            print(f"Aliases: {', '.join(command.aliases)}")
+        
+        if command.tips:
+            print("\nTips:")
+            for tip in command.tips:
+                print(f"  - {tip}")
+
+    def _show_general_help(self) -> None:
+        """Show general help information"""
+        print("\nAvailable Commands:")
+        # Group commands by first letter for better organization
+        commands_by_letter = {}
+        for cmd_name, cmd in self.commands.items():
+            # Only show main commands, not aliases
+            if cmd_name == cmd.name:
+                first_letter = cmd_name[0].upper()
+                if first_letter not in commands_by_letter:
+                    commands_by_letter[first_letter] = []
+                commands_by_letter[first_letter].append(cmd)
+
+        for letter in sorted(commands_by_letter.keys()):
+            print(f"\n{letter}:")
+            for cmd in sorted(commands_by_letter[letter], key=lambda x: x.name):
+                print(f"  {cmd.name:<15} - {cmd.description}")
+
+        if self.agent:
+            print(f"\nCurrent Agent: {self.agent.name}")
+        else:
+            print("\nNo agent currently loaded")
+
+    def exit(self, input_list: List[str]) -> None:
+        """Exit the CLI gracefully"""
         print("\nGoodbye! 👋")
         sys.exit(0)
 
-    def agent_action(self, input_list):
+    def agent_action(self, input_list: List[str]) -> None:
+        """Handle agent action command"""
         if self.agent is None:
-            print("No agent is currently loaded. Use 'load_agent' to load an agent.")
+            print("No agent is currently loaded. Use 'load-agent' to load an agent.")
             return
 
         if len(input_list) < 3:
-            print("Please specify both a connection and an action. e.g. 'agent_action twitter post-tweet'")
+            print("Please specify both a connection and an action.")
+            print("Format: agent-action {connection} {action}")
             return
 
         connection_string = input_list[1]
         action_string = input_list[2]
 
         if not self.connection_manager.check_connection(connection_string):
-            print(f"Connection '{connection_string}' is not configured. Use 'configure_connection' to set it up.")
+            print(f"Connection '{connection_string}' is not configured.")
+            print("Use 'configure-connection' to set it up.")
             return
 
         try:
             result = self.agent.perform_action(
-                action_string=action_string, 
-                connection_string=connection_string, 
+                action_string=action_string,
+                connection_string=connection_string,
                 input_list=input_list
             )
-            print("RESULT:", result)
+            print("Result:", result)
         except Exception as e:
-            print(f"An error occurred while running the action: {e}")
+            print(f"Error running action: {e}")
 
-    def agent_loop(self, input_list):
+    def agent_loop(self, input_list: List[str]) -> None:
+        """Handle agent loop command"""
         if self.agent is None:
-            print("No agent is currently loaded. Use 'load_agent' to load an agent.")
+            print("No agent is currently loaded. Use 'load-agent' to load an agent.")
             return
 
-        print("\n🚀 STARTING AGENT LOOP...")
-        print("Press Ctrl+C at any time to stop the autonomous loop.")
+        print("\n🚀 Starting agent loop...")
+        print("Press Ctrl+C at any time to stop the loop.")
         print_h_bar()
 
         try:
             self.agent.loop()
         except KeyboardInterrupt:
-            print("\n🛑 AGENT LOOP STOPPED BY USER.")
+            print("\n🛑 Agent loop stopped by user.")
+        except Exception as e:
+            print(f"\nError in agent loop: {e}")
 
-    def list_agents(self, input_list):
-        print("\nAVAILABLE AGENTS:")
-        agents = 0
-        for file in os.listdir("agents"):
-            if file.endswith(".json"):
-                print(f"- {file.removesuffix('.json')}")
-                agents += 1
-
-        if agents == 0:
-            print("No agents found. Use 'create_agent' to create a new agent.")
-
-    def load_agent(self, input_list):
-        if len(input_list) < 2:
-            print("Please specify an agent name. Use 'list_agents' to see available agents.")
+    def list_agents(self, input_list: List[str]) -> None:
+        """Handle list agents command"""
+        print("\nAvailable Agents:")
+        agents_dir = Path("agents")
+        if not agents_dir.exists():
+            print("No agents directory found.")
             return
 
+        agents = list(agents_dir.glob("*.json"))
+        if not agents:
+            print("No agents found. Use 'create-agent' to create a new agent.")
+            return
+
+        for agent_file in sorted(agents):
+            print(f"- {agent_file.stem}")
+
+    def load_agent(self, input_list: List[str]) -> None:
+        """Handle load agent command"""
+        if len(input_list) < 2:
+            print("Please specify an agent name.")
+            print("Format: load-agent {agent_name}")
+            print("Use 'list-agents' to see available agents.")
+            return
+
+        agent_name = input_list[1]
         try:
+            agent_path = Path("agents") / f"{agent_name}.json"
             self.agent = load_agent_from_file(
-                agent_path=f"agents/{input_list[1].removesuffix('.json')}.json",
+                agent_path=str(agent_path),
                 connection_manager=self.connection_manager
             )
-            print(f"\n✅ SUCCESSFULLY LOADED AGENT: {self.agent.name}")
+            print(f"\n✅ Successfully loaded agent: {self.agent.name}")
         except FileNotFoundError:
-            print("Agent file not found. Use 'list_agents' to see available agents.")
-        except KeyError:
-            print("Agent file is missing a required field.")
+            print(f"Agent file not found: {agent_name}")
+            print("Use 'list-agents' to see available agents.")
+        except KeyError as e:
+            print(f"Invalid agent file: {e}")
         except Exception as e:
-            print(f"An error occurred while loading the agent: {e}")
+            print(f"Error loading agent: {e}")
 
-    def create_agent(self, input_list):
-        # TODO: Implement interactive agent creation wizard
-        pass
+    def create_agent(self, input_list: List[str]) -> None:
+        """Handle create agent command"""
+        print("\nℹ️ Agent creation wizard not implemented yet.")
+        print("Please create agent JSON files manually in the 'agents' directory.")
 
-    def list_actions(self, input_list):
+    def list_actions(self, input_list: List[str]) -> None:
+        """Handle list actions command"""
         if len(input_list) < 2:
-            print("\nPlease specify a connection. Use 'list_connections' to see supported connections.")
+            print("\nPlease specify a connection.")
+            print("Format: list-actions {connection}")
+            print("Use 'list-connections' to see available connections.")
             return
-        self.connection_manager.list_actions(connection_string=input_list[1])
 
-    def list_connections(self, input_list):
+        connection_string = input_list[1]
+        self.connection_manager.list_actions(connection_string=connection_string)
+
+    def list_connections(self, input_list: List[str]) -> None:
+        """Handle list connections command"""
         self.connection_manager.list_connections()
 
-    def configure_connection(self, input_list):
+    def configure_connection(self, input_list: List[str]) -> None:
+        """Handle configure connection command"""
         if len(input_list) < 2:
-            print("\nPlease specify a connection to configure. Use 'list_connections' to see supported connections.")
+            print("\nPlease specify a connection to configure.")
+            print("Format: configure-connection {connection}")
+            print("Use 'list-connections' to see available connections.")
             return
-        self.connection_manager.configure_connection(connection_string=input_list[1])
+
+        connection_string = input_list[1]
+        self.connection_manager.configure_connection(connection_string=connection_string)
