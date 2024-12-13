@@ -26,6 +26,10 @@ class TwitterConnection(BaseConnection):
             "like-tweet": {
                 "func": self.like_tweet,
                 "args": {"tweet_id": "str"},
+            },
+            "reply-to-tweet": {
+                "func": self.reply_to_tweet,
+                "args": {"tweet_id": "str", "message": "str"},
             }
         }
 
@@ -56,93 +60,6 @@ class TwitterConnection(BaseConnection):
 
         return self._oauth_session
 
-    def get_latest_tweets(self, username: str, count: int = 10, **kwargs):
-        """
-        Get latest tweets for a user
-        
-        Args:
-            username (str): Twitter username to fetch tweets from
-            count (int): Number of tweets to retrieve (default: 10)
-            
-        Returns:
-            list: List of tweet objects containing tweet data
-            
-        Raises:
-            Exception: If API request fails or credentials are invalid
-        """
-        try:
-            user_id = self.get_user_id_from_username(username)
-        except Exception as e:
-            raise Exception(f"Failed to get user ID for username {username}: {str(e)}")
-
-        params = {
-            "tweet.fields": "created_at,public_metrics,text",
-            "max_results": min(count, 100),  # API limit is 100
-            "exclude": "retweets,replies"
-        }
-
-        response = self._get_oauth().get(
-            f"https://api.twitter.com/2/users/{user_id}/tweets",
-            params=params
-        )
-
-        if response.status_code != 200:
-            raise Exception(
-                f"Request returned an error: {response.status_code} {response.text}"
-            )
-
-        json_response = response.json()
-        return json_response.get("data", [])
-
-    def post_tweet(self, message: str, **kwargs):
-        """
-        Post a new tweet
-        
-        Args:
-            message (str): The tweet content to post
-            
-        Returns:
-            dict: Response from Twitter API containing tweet data
-            
-        Raises:
-            Exception: If API request fails or credentials are invalid
-            ValueError: If message exceeds Twitter's character limit
-        """
-        if len(message) > 280:
-            raise ValueError("Tweet exceeds 280 character limit")
-
-        response = self._get_oauth().post(
-            "https://api.twitter.com/2/tweets",
-            json={"text": message}
-        )
-
-        if response.status_code != 201:
-            raise Exception(
-                f"Request returned an error: {response.status_code} {response.text}"
-            )
-
-        return response.json()
-
-    def get_user_id_from_username(self, username: str) -> str:
-        """
-        Get the numeric user ID for a given Twitter username using the Twitter API v2
-        """
-        params = {"usernames": username}
-        response = self._get_oauth().get(
-            "https://api.twitter.com/2/users/by",
-            params=params
-        )
-
-        if response.status_code != 200:
-            raise Exception(
-                f"Request returned an error: {response.status_code} {response.text}"
-            )
-
-        json_response = response.json()
-        if not json_response.get("data"):
-            raise Exception(f"No user found for username: {username}")
-            
-        return json_response["data"][0]["id"]
 
     def configure(self):
         """Sets up Twitter API authentication"""
@@ -283,6 +200,27 @@ class TwitterConnection(BaseConnection):
                 print("❌ There was an error validating your Twitter credentials:", e)
             return False
 
+    def get_user_id_from_username(self, username: str) -> str:
+        """
+        Get the numeric user ID for a given Twitter username using the Twitter API v2
+        """
+        params = {"usernames": username}
+        response = self._get_oauth().get(
+            "https://api.twitter.com/2/users/by",
+            params=params
+        )
+
+        if response.status_code != 200:
+            raise Exception(
+                f"Request returned an error: {response.status_code} {response.text}"
+            )
+
+        json_response = response.json()
+        if not json_response.get("data"):
+            raise Exception(f"No user found for username: {username}")
+            
+        return json_response["data"][0]["id"]
+
     def read_timeline(self, count=10, **kwargs) -> list:
         """Read tweets from the user's timeline"""
         user_id = os.getenv("TWITTER_USER_ID")
@@ -324,6 +262,111 @@ class TwitterConnection(BaseConnection):
                 tweet['author_username'] = "Unknown"
 
         return tweets
+
+    def get_latest_tweets(self, username: str, count: int = 10, **kwargs):
+        """
+        Get latest tweets for a user
+        
+        Args:
+            username (str): Twitter username to fetch tweets from
+            count (int): Number of tweets to retrieve (default: 10)
+            
+        Returns:
+            list: List of tweet objects containing tweet data
+            
+        Raises:
+            Exception: If API request fails or credentials are invalid
+        """
+        try:
+            user_id = self.get_user_id_from_username(username)
+        except Exception as e:
+            raise Exception(f"Failed to get user ID for username {username}: {str(e)}")
+
+        params = {
+            "tweet.fields": "created_at,public_metrics,text",
+            "max_results": min(count, 100),  # API limit is 100
+            "exclude": "retweets,replies"
+        }
+
+        response = self._get_oauth().get(
+            f"https://api.twitter.com/2/users/{user_id}/tweets",
+            params=params
+        )
+
+        if response.status_code != 200:
+            raise Exception(
+                f"Request returned an error: {response.status_code} {response.text}"
+            )
+
+        json_response = response.json()
+        return json_response.get("data", [])
+
+    def post_tweet(self, message: str, **kwargs):
+        """
+        Post a new tweet
+        
+        Args:
+            message (str): The tweet content to post
+            
+        Returns:
+            dict: Response from Twitter API containing tweet data
+            
+        Raises:
+            Exception: If API request fails or credentials are invalid
+            ValueError: If message exceeds Twitter's character limit
+        """
+        if len(message) > 280:
+            raise ValueError("Tweet exceeds 280 character limit")
+
+        response = self._get_oauth().post(
+            "https://api.twitter.com/2/tweets",
+            json={"text": message}
+        )
+
+        if response.status_code != 201:
+            raise Exception(
+                f"Request returned an error: {response.status_code} {response.text}"
+            )
+
+        return response.json()
+
+    def reply_to_tweet(self, tweet_id: str, message: str, **kwargs):
+        """
+        Reply to a tweet
+        
+        Args:
+            tweet_id (str): ID of the tweet to reply to
+            message (str): The reply message content
+            
+        Returns:
+            dict: Response from Twitter API containing reply tweet data
+            
+        Raises:
+            Exception: If API request fails or credentials are invalid
+            ValueError: If message exceeds Twitter's character limit
+        """
+        if len(message) > 280:
+            raise ValueError("Reply exceeds 280 character limit")
+
+        # Create payload with reply metadata
+        payload = {
+            "text": message,
+            "reply": {
+                "in_reply_to_tweet_id": tweet_id
+            }
+        }
+
+        response = self._get_oauth().post(
+            "https://api.twitter.com/2/tweets",
+            json=payload
+        )
+
+        if response.status_code != 201:
+            raise Exception(
+                f"Request returned an error: {response.status_code} {response.text}"
+            )
+
+        return response.json()
 
     def like_tweet(self, tweet_id: str, **kwargs):
         """
