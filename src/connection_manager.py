@@ -10,13 +10,18 @@ class ConnectionManager:
             'openai': OpenAIConnection(),
         }
 
+        # Define action parameter requirements
+        self.action_params = {
+            "get-latest-tweets": {"required": ["username", "count"], "usage": "<username> <count>"},
+            "post-tweet": {"required": ["message"], "usage": "<message>"},
+            "like-tweet": {"required": ["tweet_id"], "usage": "<tweet_id>"},
+            "reply-to-tweet": {"required": ["tweet_id", "message"], "usage": "<tweet_id> <message>"}
+        }
+
     def configure_connection(self, connection_string: str):
         try:
-            # Match connection string to a supported connection
             connection = self.connections[connection_string]
-            # Run configuration function
             connection.configure()
-            # If configuration was successful, add connection to list
             if connection.is_configured():
                 print(f"\n✅ SUCCESSFULLY CONFIGURED CONNECTION: {connection_string}")
             else:
@@ -28,17 +33,14 @@ class ConnectionManager:
 
     def check_connection(self, connection_string: str, verbose: bool = False)-> bool:
         try:
-            # Match connection string to a supported connection
             connection = self.connections[connection_string]
-            # If configuration was successful, add connection to list
             if connection.is_configured():
                 if verbose:
                     print(f"\n✅ SUCCESSFULLY CHECKED CONNECTION: {connection_string}")
                 return True
-            else:
-                if verbose:
-                    print(f"\n❌ ERROR CHECKING CONNECTION: {connection_string}")
-                return False
+            if verbose:
+                print(f"\n❌ ERROR CHECKING CONNECTION: {connection_string}")
+            return False
         except KeyError:
             print("\nUnknown connection. Try 'list-connections' to see all supported connections.")
             return False
@@ -56,36 +58,64 @@ class ConnectionManager:
 
     def list_actions(self, connection_string: str):
         try:
-            # Match connection string to a supported connection
             connection = self.connections[connection_string]
-
-            # Tell the user whether the connection is configured or not
             if connection.is_configured():
                 print(f"\n✅ {connection_string} is configured. You can use any of its actions.")
             else:
                 print(f"\n❌ {connection_string} is not configured. You must configure a connection in order to use its actions.")
-
-            # List available actions
             print("\nAVAILABLE ACTIONS:")
             for action, details in connection.actions.items():
-                print(f"- {action}: {details['args']}")
+                print(f"- {action}: {details}")
         except KeyError:
             print("\nUnknown connection. Try 'list-connections' to see all supported connections.")
         except Exception as e:
             print(f"\nAn error occurred: {e}")
 
-    def find_and_perform_action(self, action_string, connection_string, **kwargs):
+    def find_and_perform_action(self, action_string: str, connection_string: str, **kwargs):
         try:
-            # Match connection string to a supported connection
             connection = self.connections[connection_string]
+            action_info = connection.actions.get(action_string)
+            if not action_info:
+                raise KeyError(f"Unknown action: {action_string}")
 
-            # Run action
-            result = connection.perform_action(action_string, **kwargs)
+            if 'input_list' in kwargs:
+                args = kwargs.pop('input_list')[3:]  # Skip command, connection, and action
+                param_info = self.action_params.get(action_string, {})
+                required = param_info.get("required", [])
+                
+                if len(args) < len(required):
+                    print(f"\nError: {action_string} requires {len(required)} arguments")
+                    print(f"Usage: agent-action {connection_string} {action_string} {param_info.get('usage', '')}")
+                    return None
 
-            # Return result
-            return result
-        except KeyError:
-            print("\nUnknown connection. Try 'list-connections' to see all supported connections.")
+                # Handle parameters based on action requirements
+                if "count" in required:
+                    try:
+                        kwargs["count"] = int(args[required.index("count")])
+                    except ValueError:
+                        print("\nError: Count must be a number")
+                        return None
+
+                if "message" in required:
+                    message_index = required.index("message")
+                    message_parts = args[message_index:] if message_index == len(required) - 1 else [args[message_index]]
+                    message = ' '.join(message_parts)
+                    if message.startswith('"') and message.endswith('"'):
+                        message = message[1:-1]
+                    kwargs["message"] = message
+
+                # Handle other parameters
+                for i, param in enumerate(required):
+                    if param not in ["message", "count"] and i < len(args):
+                        kwargs[param] = args[i]
+
+            return connection.perform_action(action_string, **kwargs)
+            
+        except KeyError as e:
+            print(f"\nUnknown connection or action: {str(e)}")
+            return None
+        except ValueError as e:
+            print(f"\nInvalid argument: {str(e)}")
             return None
         except Exception as e:
             print(f"\nAn error occurred: {e}")
