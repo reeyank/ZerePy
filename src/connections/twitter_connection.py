@@ -10,8 +10,6 @@ import tweepy
 
 # Configure module logger
 logger = logging.getLogger("connections.twitter_connection")
-logger.setLevel(logging.DEBUG)
-
 
 class TwitterConnectionError(Exception):
     """Base exception for Twitter connection errors"""
