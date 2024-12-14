@@ -16,9 +16,9 @@ class ConnectionManager:
             "post-tweet": {"required": ["message"], "usage": "<message>"},
             "like-tweet": {"required": ["tweet_id"], "usage": "<tweet_id>"},
             "reply-to-tweet": {"required": ["tweet_id", "message"], "usage": "<tweet_id> <message>"},
-            "generate-text": {"required": ["prompt", "system_prompt"], "usage": "<prompt> <system_prompt>"},
-            "set-model": {"required": ["model"], "usage": "<model>"},
-            "check-model": {"required": [], "usage": ""},
+            "generate-text": {"required": ["prompt", "system_prompt", "model"], "usage": "<prompt> <system_prompt> <model>"},
+            "check-model": {"required": ["model"], "usage": "<model>"},
+            "list-models": {"required": [], "usage": ""}
         }
 
     def configure_connection(self, connection_string: str):
