@@ -180,12 +180,6 @@ class ZerePyCLI:
             )
         )
 
-    def _register_command(self, command: Command) -> None:
-        """Register a command and its aliases"""
-        self.commands[command.name] = command
-        for alias in command.aliases:
-            self.commands[alias] = command
-
     def _setup_prompt_toolkit(self) -> None:
         """Setup prompt toolkit components"""
         self.style = Style.from_dict({
@@ -210,6 +204,12 @@ class ZerePyCLI:
             style=self.style,
             history=FileHistory(str(history_file))
         )
+
+    def _register_command(self, command: Command) -> None:
+        """Register a command and its aliases"""
+        self.commands[command.name] = command
+        for alias in command.aliases:
+            self.commands[alias] = command
 
     def get_prompt_message(self) -> HTML:
         """Generate the prompt message based on current state"""
@@ -277,6 +277,7 @@ class ZerePyCLI:
         logger.info("👋 Welcome to the ZerePy CLI!")
         logger.info("Type 'help' for a list of commands.")
         self.list_connections([])
+        self._list_loaded_agent()
         print_h_bar() 
 
     def help(self, input_list: List[str]) -> None:
@@ -438,6 +439,12 @@ class ZerePyCLI:
 
         for agent_file in sorted(agents):
             logger.info(f"- {agent_file.stem}")
+    
+    def _list_loaded_agent(self) -> None:
+        if self.agent:
+            logger.inf(f"Agent {self.agent.name} is loaded. Start the agent loop with the command 'start' or use on of the action commands.")
+        else:
+            logger.info(f"No default agent is loaded, please use the load-agent command to do that.")
 
     def load_agent(self, input_list: List[str]) -> None:
         """Handle load agent command"""
