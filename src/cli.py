@@ -180,6 +180,17 @@ class ZerePyCLI:
                 aliases=['model', 'q']
             )
         )
+        
+        # Define default agent
+        self._register_command(
+            Command(
+                name="set-default-agent",
+                description="Define which model is loaded when the CLI starts.",
+                tips=["You can also just change the 'default_agent' field in agents/general.json"],
+                handler=self.set_default_agent,
+                aliases=['sda']
+            )
+        )
 
     def _setup_prompt_toolkit(self) -> None:
         """Setup prompt toolkit components"""
@@ -496,6 +507,40 @@ class ZerePyCLI:
         """Handle create agent command"""
         logger.info("\nℹ️ Agent creation wizard not implemented yet.")
         logger.info("Please create agent JSON files manually in the 'agents' directory.")
+    
+    def set_default_agent(self, input_list: List[str]):
+        """Handle set-default-agent command"""
+        if len(input_list) < 2:
+            logger.info("Please specify the same of the agent file.")
+            return
+        
+        agent_general_config_path = Path("agents") / "general.json"
+        file = None
+        try:
+            file = open(agent_general_config_path, 'r')
+            data = json.load(file)
+            agent_file_name = input_list[1]
+            # if file does not exist, refuse to set it as default
+            try:
+                agent_path = Path("agents") / f"{agent_file_name}.json"
+                open(agent_path, 'r')
+            except FileNotFoundError:
+                logging.error("Agent file not found.")
+                return
+            
+            data['default_agent'] = input_list[1]
+            with open(agent_general_config_path, 'w') as f:
+                json.dump(data, f, indent=4)
+            logger.info(f"Agent {agent_file_name} is now set as default.")
+        except FileNotFoundError:
+            logger.error("File not found")
+            return
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON format")
+            return
+        finally:
+            if file:
+                file.close()
 
     def list_actions(self, input_list: List[str]) -> None:
         """Handle list actions command"""
