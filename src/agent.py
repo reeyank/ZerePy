@@ -1,8 +1,10 @@
 import json
 import random
 import time
+import logging
 from src.connection_manager import ConnectionManager
 
+logger = logging.getLogger("agent")
 
 class ZerePyAgent:
     def __init__(
@@ -141,6 +143,8 @@ def load_agent_from_file(agent_path: str, connection_manager: ConnectionManager)
         raise KeyError(f"Agent file is missing a required field.")
     except Exception as e:
         raise Exception(f"An error occurred while loading the agent: {e}")
+    
+    logger.info(f"\n✅ Successfully loaded agent: {agent.name}")
     return agent
 
 

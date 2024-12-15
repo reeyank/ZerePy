@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import logging
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional
@@ -179,12 +180,17 @@ class ZerePyCLI:
                 aliases=['model', 'q']
             )
         )
-
-    def _register_command(self, command: Command) -> None:
-        """Register a command and its aliases"""
-        self.commands[command.name] = command
-        for alias in command.aliases:
-            self.commands[alias] = command
+        
+        # Define default agent
+        self._register_command(
+            Command(
+                name="set-default-agent",
+                description="Define which model is loaded when the CLI starts.",
+                tips=["You can also just change the 'default_agent' field in agents/general.json"],
+                handler=self.set_default_agent,
+                aliases=['sda']
+            )
+        )
 
     def _setup_prompt_toolkit(self) -> None:
         """Setup prompt toolkit components"""
@@ -211,6 +217,12 @@ class ZerePyCLI:
             history=FileHistory(str(history_file))
         )
 
+    def _register_command(self, command: Command) -> None:
+        """Register a command and its aliases"""
+        self.commands[command.name] = command
+        for alias in command.aliases:
+            self.commands[alias] = command
+
     def get_prompt_message(self) -> HTML:
         """Generate the prompt message based on current state"""
         agent_status = f"({self.agent.name})" if self.agent else "(no agent)"
@@ -219,7 +231,30 @@ class ZerePyCLI:
     def main_loop(self) -> None:
         """Main CLI loop"""
         self._print_welcome_message()
+
+        # Load default agent
+        agent_general_config_path = Path("agents") / "general.json"
+        file = None
+        try:
+            file = open(agent_general_config_path, 'r')
+            data = json.load(file)
+            if not data.get('default_agent'):
+                logger.error('No default agent defined, please set one in general.json')
+                return
+            self.load_agent(['load-agent', data.get('default_agent')])
+        except FileNotFoundError:
+            logger.error("File not found")
+            return
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON format")
+            return
+        finally:
+            if file:
+                file.close()
         
+        self._list_loaded_agent()
+        
+        # Start CLI loop
         while True:
             try:
                 input_string = self.session.prompt(
@@ -438,6 +473,12 @@ class ZerePyCLI:
 
         for agent_file in sorted(agents):
             logger.info(f"- {agent_file.stem}")
+    
+    def _list_loaded_agent(self) -> None:
+        if self.agent:
+            logger.info(f"\nAgent {self.agent.name} is loaded. Start the agent loop with the command 'start' or use one of the action commands.")
+        else:
+            logger.info(f"\nNo default agent is loaded, please use the load-agent command to do that.")
 
     def load_agent(self, input_list: List[str]) -> None:
         """Handle load agent command"""
@@ -454,7 +495,6 @@ class ZerePyCLI:
                 agent_path=str(agent_path),
                 connection_manager=self.connection_manager
             )
-            logger.info(f"\n✅ Successfully loaded agent: {self.agent.name}")
         except FileNotFoundError:
             logger.error(f"Agent file not found: {agent_name}")
             logger.info("Use 'list-agents' to see available agents.")
@@ -467,6 +507,40 @@ class ZerePyCLI:
         """Handle create agent command"""
         logger.info("\nℹ️ Agent creation wizard not implemented yet.")
         logger.info("Please create agent JSON files manually in the 'agents' directory.")
+    
+    def set_default_agent(self, input_list: List[str]):
+        """Handle set-default-agent command"""
+        if len(input_list) < 2:
+            logger.info("Please specify the same of the agent file.")
+            return
+        
+        agent_general_config_path = Path("agents") / "general.json"
+        file = None
+        try:
+            file = open(agent_general_config_path, 'r')
+            data = json.load(file)
+            agent_file_name = input_list[1]
+            # if file does not exist, refuse to set it as default
+            try:
+                agent_path = Path("agents") / f"{agent_file_name}.json"
+                open(agent_path, 'r')
+            except FileNotFoundError:
+                logging.error("Agent file not found.")
+                return
+            
+            data['default_agent'] = input_list[1]
+            with open(agent_general_config_path, 'w') as f:
+                json.dump(data, f, indent=4)
+            logger.info(f"Agent {agent_file_name} is now set as default.")
+        except FileNotFoundError:
+            logger.error("File not found")
+            return
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON format")
+            return
+        finally:
+            if file:
+                file.close()
 
     def list_actions(self, input_list: List[str]) -> None:
         """Handle list actions command"""
