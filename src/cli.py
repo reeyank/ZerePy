@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import logging
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional
@@ -219,7 +220,30 @@ class ZerePyCLI:
     def main_loop(self) -> None:
         """Main CLI loop"""
         self._print_welcome_message()
+
+        # Load default agent
+        agent_general_config_path = Path("agents") / "general.json"
+        file = None
+        try:
+            file = open(agent_general_config_path, 'r')
+            data = json.load(file)
+            if not data.get('default_agent'):
+                logger.error('No default agent defined, please set one in general.json')
+                return
+            self.load_agent(['load-agent', data.get('default_agent')])
+        except FileNotFoundError:
+            logger.error("File not found")
+            return
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON format")
+            return
+        finally:
+            if file:
+                file.close()
         
+        self._list_loaded_agent()
+        
+        # Start CLI loop
         while True:
             try:
                 input_string = self.session.prompt(
@@ -277,7 +301,6 @@ class ZerePyCLI:
         logger.info("👋 Welcome to the ZerePy CLI!")
         logger.info("Type 'help' for a list of commands.")
         self.list_connections([])
-        self._list_loaded_agent()
         print_h_bar() 
 
     def help(self, input_list: List[str]) -> None:
@@ -442,9 +465,9 @@ class ZerePyCLI:
     
     def _list_loaded_agent(self) -> None:
         if self.agent:
-            logger.inf(f"Agent {self.agent.name} is loaded. Start the agent loop with the command 'start' or use on of the action commands.")
+            logger.info(f"\nAgent {self.agent.name} is loaded. Start the agent loop with the command 'start' or use one of the action commands.")
         else:
-            logger.info(f"No default agent is loaded, please use the load-agent command to do that.")
+            logger.info(f"\nNo default agent is loaded, please use the load-agent command to do that.")
 
     def load_agent(self, input_list: List[str]) -> None:
         """Handle load agent command"""
@@ -461,7 +484,6 @@ class ZerePyCLI:
                 agent_path=str(agent_path),
                 connection_manager=self.connection_manager
             )
-            logger.info(f"\n✅ Successfully loaded agent: {self.agent.name}")
         except FileNotFoundError:
             logger.error(f"Agent file not found: {agent_name}")
             logger.info("Use 'list-agents' to see available agents.")
