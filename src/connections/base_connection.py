@@ -5,6 +5,11 @@ class BaseConnection(ABC):
     def __init__(self):
         self.actions = {}
 
+    @property
+    @abstractmethod
+    def is_llm_provider(self):
+        pass  # Abstract property, must be implemented by subclasses
+
     @abstractmethod
     def configure(self, **kwargs):
         """
