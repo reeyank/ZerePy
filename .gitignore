@@ -11,5 +11,6 @@ twitter_config.json
 # AGENTS
 agents/*.json
 
-# Include example agents
+# Include example agent and general config
 !agents/example.json
+!agents/general.json
