@@ -432,7 +432,7 @@ class ZerePyCLI:
             valid_provider_chosen = False
             while not valid_provider_chosen:
                 logger.info("Available Model Providers:")
-                model_providers = ["openai"] # TODO: List all possible valid LLM provider connections
+                model_providers = self.connection_manager.get_model_providers()
                 for provider in model_providers:
                     logger.info(f"- {provider}")
                 response = input("\nPlease enter the model provider you prefer: ")
