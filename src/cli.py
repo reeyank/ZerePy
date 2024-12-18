@@ -65,6 +65,7 @@ class ZerePyCLI:
             )
         )
         
+        ################## AGENTS ################## 
         # Agent action command
         self._register_command(
             Command(
@@ -124,6 +125,29 @@ class ZerePyCLI:
             )
         )
         
+        # Define default agent
+        self._register_command(
+            Command(
+                name="set-default-agent",
+                description="Define which model is loaded when the CLI starts.",
+                tips=["You can also just change the 'default_agent' field in agents/general.json"],
+                handler=self.set_default_agent,
+                aliases=['default']
+            )
+        )
+        
+        # Check preferred model command
+        self._register_command(
+            Command(
+                name="agent-model",
+                description="Allows you to change the current agent's preferred LLM model and model provider.",
+                tips=[], #TODO: Add tips
+                handler=self.agent_model,
+                aliases=['model', 'q']
+            )
+        )        
+
+        ################## CONNECTIONS ################## 
         # List actions command
         self._register_command(
             Command(
@@ -159,6 +183,7 @@ class ZerePyCLI:
             )
         )
         
+        ################## MISC ################## 
         # Exit command
         self._register_command(
             Command(
@@ -167,28 +192,6 @@ class ZerePyCLI:
                 tips=["You can also use Ctrl+D to exit"],
                 handler=self.exit,
                 aliases=['quit', 'q']
-            )
-        )
-
-        # Check preferred model command
-        self._register_command(
-            Command(
-                name="agent-model",
-                description="Allows you to change the current agent's preferred LLM model and model provider.",
-                tips=[], #TODO: Add tips
-                handler=self.agent_model,
-                aliases=['model', 'q']
-            )
-        )
-        
-        # Define default agent
-        self._register_command(
-            Command(
-                name="set-default-agent",
-                description="Define which model is loaded when the CLI starts.",
-                tips=["You can also just change the 'default_agent' field in agents/general.json"],
-                handler=self.set_default_agent,
-                aliases=['sda']
             )
         )
 
@@ -217,63 +220,19 @@ class ZerePyCLI:
             history=FileHistory(str(history_file))
         )
 
+    ###################
+    # Helper Functions
+    ###################
     def _register_command(self, command: Command) -> None:
         """Register a command and its aliases"""
         self.commands[command.name] = command
         for alias in command.aliases:
             self.commands[alias] = command
 
-    def get_prompt_message(self) -> HTML:
+    def _get_prompt_message(self) -> HTML:
         """Generate the prompt message based on current state"""
         agent_status = f"({self.agent.name})" if self.agent else "(no agent)"
         return HTML(f'<prompt>ZerePy-CLI</prompt> {agent_status} > ')
-
-    def main_loop(self) -> None:
-        """Main CLI loop"""
-        self._print_welcome_message()
-
-        # Load default agent
-        agent_general_config_path = Path("agents") / "general.json"
-        file = None
-        try:
-            file = open(agent_general_config_path, 'r')
-            data = json.load(file)
-            if not data.get('default_agent'):
-                logger.error('No default agent defined, please set one in general.json')
-                return
-            self.load_agent(['load-agent', data.get('default_agent')])
-        except FileNotFoundError:
-            logger.error("File not found")
-            return
-        except json.JSONDecodeError:
-            logger.error("Invalid JSON format")
-            return
-        finally:
-            if file:
-                file.close()
-        
-        self._list_loaded_agent()
-        
-        # Start CLI loop
-        while True:
-            try:
-                input_string = self.session.prompt(
-                    self.get_prompt_message(),
-                    style=self.style
-                ).strip()
-
-                if not input_string:
-                    continue
-
-                self._handle_command(input_string)
-                print_h_bar()
-
-            except KeyboardInterrupt:
-                continue
-            except EOFError:
-                self.exit([])
-            except Exception as e:
-                logger.exception(f"Unexpected error: {e}") 
 
     def _handle_command(self, input_string: str) -> None:
         """Parse and handle a command input"""
@@ -313,13 +272,6 @@ class ZerePyCLI:
         logger.info("Type 'help' for a list of commands.")
         self.list_connections([])
         print_h_bar() 
-
-    def help(self, input_list: List[str]) -> None:
-        """Enhanced help command with better formatting"""
-        if len(input_list) > 1:
-            self._show_command_help(input_list[1])
-        else:
-            self._show_general_help()
 
     def _show_command_help(self, command_name: str) -> None:
         """Show help for a specific command"""
@@ -362,15 +314,42 @@ class ZerePyCLI:
             for cmd in sorted(commands_by_letter[letter], key=lambda x: x.name):
                 logger.info(f"  {cmd.name:<15} - {cmd.description}")
 
+    def _list_loaded_agent(self) -> None:
         if self.agent:
-            logger.info(f"\nCurrent Agent: {self.agent.name}")
+            logger.info(f"\nAgent {self.agent.name} is loaded. Start the agent loop with the command 'start' or use one of the action commands.")
         else:
-            logger.info("\nNo agent currently loaded")
+            logger.info(f"\nNo default agent is loaded, please use the load-agent command to do that.")
 
-    def exit(self, input_list: List[str]) -> None:
-        """Exit the CLI gracefully"""
-        logger.info("\nGoodbye! 👋")
-        sys.exit(0)
+    def _load_default_agent(self) -> None:
+        """Load users default agent"""
+        agent_general_config_path = Path("agents") / "general.json"
+        file = None
+        try:
+            file = open(agent_general_config_path, 'r')
+            data = json.load(file)
+            if not data.get('default_agent'):
+                logger.error('No default agent defined, please set one in general.json')
+                return
+            self.load_agent(['load-agent', data.get('default_agent')])
+        except FileNotFoundError:
+            logger.error("File not found")
+            return
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON format")
+            return
+        finally:
+            if file:
+                file.close()
+
+    ###################
+    # Command functions
+    ###################
+    def help(self, input_list: List[str]) -> None:
+        """List all commands supported by the CLI"""
+        if len(input_list) > 1:
+            self._show_command_help(input_list[1])
+        else:
+            self._show_general_help()
 
     def agent_action(self, input_list: List[str]) -> None:
         """Handle agent action command"""
@@ -418,46 +397,6 @@ class ZerePyCLI:
         except Exception as e:
             logger.error(f"Error in agent loop: {e}")
 
-    def agent_model(self, input_list: List[str]) -> None:
-        """Handle agent model command"""
-        if self.agent is None:
-            logger.info("No agent is currently loaded. Use 'load-agent' to load an agent.")
-            return
-
-        # Show current provider and ask if user wants to change it
-        logger.info(f"Current Agent's Model Provider: {self.agent.model_provider}")
-        response = input("Do you want to change the model provider? (y/n): ")
-        if response.lower() == 'y':
-            # Have the user select a model provider
-            valid_provider_chosen = False
-            while not valid_provider_chosen:
-                logger.info("Available Model Providers:")
-                model_providers = self.connection_manager.get_model_providers()
-                for provider in model_providers:
-                    logger.info(f"- {provider}")
-                response = input("\nPlease enter the model provider you prefer: ")
-                if response in model_providers:
-                    valid_provider_chosen = True
-                else:
-                    logger.info("Not a valid model provider. Please try again.")
-            result = self.agent.set_preferred_model_provider(response)
-            logger.info(f"Result: Set model provider to {response}. Make sure you have selected a valid model for this provider!")
-        else:
-            logger.info("No changes made.")
-
-        # Show the current model and ask if the user wants to change it
-        logger.info(f"\nCurrent Agent's Preferred LLM Model: {self.agent.model}")
-        response = input("Do you want to change the model? (y/n): ")
-        if response.lower() == 'y':
-            # Have the user select a model provider
-            self.agent.list_available_models()
-            response = input("\nPlease enter the model you prefer: ")
-            result = self.agent.set_preferred_model(response)
-            logger.info(f"Result: {result}")
-        else:
-            logger.info("No changes made.")
-
-
     def list_agents(self, input_list: List[str]) -> None:
         """Handle list agents command"""
         logger.info("\nAvailable Agents:")
@@ -472,13 +411,9 @@ class ZerePyCLI:
             return
 
         for agent_file in sorted(agents):
+            if agent_file == "general":
+                continue
             logger.info(f"- {agent_file.stem}")
-    
-    def _list_loaded_agent(self) -> None:
-        if self.agent:
-            logger.info(f"\nAgent {self.agent.name} is loaded. Start the agent loop with the command 'start' or use one of the action commands.")
-        else:
-            logger.info(f"\nNo default agent is loaded, please use the load-agent command to do that.")
 
     def load_agent(self, input_list: List[str]) -> None:
         """Handle load agent command"""
@@ -502,7 +437,7 @@ class ZerePyCLI:
             logger.error(f"Invalid agent file: {e}")
         except Exception as e:
             logger.error(f"Error loading agent: {e}")
-
+    
     def create_agent(self, input_list: List[str]) -> None:
         """Handle create agent command"""
         logger.info("\nℹ️ Agent creation wizard not implemented yet.")
@@ -542,6 +477,45 @@ class ZerePyCLI:
             if file:
                 file.close()
 
+    def agent_model(self, input_list: List[str]) -> None:
+        """Handle agent model command"""
+        if self.agent is None:
+            logger.info("No agent is currently loaded. Use 'load-agent' to load an agent.")
+            return
+
+        # Show current provider and ask if user wants to change it
+        logger.info(f"Current Agent's Model Provider: {self.agent.model_provider}")
+        response = input("Do you want to change the model provider? (y/n): ")
+        if response.lower() == 'y':
+            # Have the user select a model provider
+            valid_provider_chosen = False
+            while not valid_provider_chosen:
+                logger.info("Available Model Providers:")
+                model_providers = self.connection_manager.get_model_providers()
+                for provider in model_providers:
+                    logger.info(f"- {provider}")
+                response = input("\nPlease enter the model provider you prefer: ")
+                if response in model_providers:
+                    valid_provider_chosen = True
+                else:
+                    logger.info("Not a valid model provider. Please try again.")
+            result = self.agent.set_preferred_model_provider(response)
+            logger.info(f"Result: Set model provider to {response}. Make sure you have selected a valid model for this provider!")
+        else:
+            logger.info("No changes made.")
+
+        # Show the current model and ask if the user wants to change it
+        logger.info(f"\nCurrent Agent's Preferred LLM Model: {self.agent.model}")
+        response = input("Do you want to change the model? (y/n): ")
+        if response.lower() == 'y':
+            # Have the user select a model provider
+            self.agent.list_available_models()
+            response = input("\nPlease enter the model you prefer: ")
+            result = self.agent.set_preferred_model(response)
+            logger.info(f"Result: {result}")
+        else:
+            logger.info("No changes made.")
+
     def list_actions(self, input_list: List[str]) -> None:
         """Handle list actions command"""
         if len(input_list) < 2:
@@ -553,10 +527,6 @@ class ZerePyCLI:
         connection_string = input_list[1]
         self.connection_manager.list_actions(connection_string=connection_string)
 
-    def list_connections(self, input_list: List[str]) -> None:
-        """Handle list connections command"""
-        self.connection_manager.list_connections()
-
     def configure_connection(self, input_list: List[str]) -> None:
         """Handle configure connection command"""
         if len(input_list) < 2:
@@ -567,3 +537,43 @@ class ZerePyCLI:
 
         connection_string = input_list[1]
         self.connection_manager.configure_connection(connection_string=connection_string)
+
+    def list_connections(self, input_list: List[str]) -> None:
+        """Handle list connections command"""
+        self.connection_manager.list_connections()
+
+    def exit(self, input_list: List[str]) -> None:
+        """Exit the CLI gracefully"""
+        logger.info("\nGoodbye! 👋")
+        sys.exit(0)
+
+
+    ###################
+    # Main CLI Loop
+    ###################
+    def main_loop(self) -> None:
+        """Main CLI loop"""
+        self._print_welcome_message()
+        self._load_default_agent()
+        self._list_loaded_agent()
+        
+        # Start CLI loop
+        while True:
+            try:
+                input_string = self.session.prompt(
+                    self._get_prompt_message(),
+                    style=self.style
+                ).strip()
+
+                if not input_string:
+                    continue
+
+                self._handle_command(input_string)
+                print_h_bar()
+
+            except KeyboardInterrupt:
+                continue
+            except EOFError:
+                self.exit([])
+            except Exception as e:
+                logger.exception(f"Unexpected error: {e}") 
