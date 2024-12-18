@@ -477,6 +477,45 @@ class ZerePyCLI:
             if file:
                 file.close()
 
+    def agent_model(self, input_list: List[str]) -> None:
+        """Handle agent model command"""
+        if self.agent is None:
+            logger.info("No agent is currently loaded. Use 'load-agent' to load an agent.")
+            return
+
+        # Show current provider and ask if user wants to change it
+        logger.info(f"Current Agent's Model Provider: {self.agent.model_provider}")
+        response = input("Do you want to change the model provider? (y/n): ")
+        if response.lower() == 'y':
+            # Have the user select a model provider
+            valid_provider_chosen = False
+            while not valid_provider_chosen:
+                logger.info("Available Model Providers:")
+                model_providers = self.connection_manager.get_model_providers()
+                for provider in model_providers:
+                    logger.info(f"- {provider}")
+                response = input("\nPlease enter the model provider you prefer: ")
+                if response in model_providers:
+                    valid_provider_chosen = True
+                else:
+                    logger.info("Not a valid model provider. Please try again.")
+            result = self.agent.set_preferred_model_provider(response)
+            logger.info(f"Result: Set model provider to {response}. Make sure you have selected a valid model for this provider!")
+        else:
+            logger.info("No changes made.")
+
+        # Show the current model and ask if the user wants to change it
+        logger.info(f"\nCurrent Agent's Preferred LLM Model: {self.agent.model}")
+        response = input("Do you want to change the model? (y/n): ")
+        if response.lower() == 'y':
+            # Have the user select a model provider
+            self.agent.list_available_models()
+            response = input("\nPlease enter the model you prefer: ")
+            result = self.agent.set_preferred_model(response)
+            logger.info(f"Result: {result}")
+        else:
+            logger.info("No changes made.")
+
     def list_actions(self, input_list: List[str]) -> None:
         """Handle list actions command"""
         if len(input_list) < 2:
@@ -502,45 +541,6 @@ class ZerePyCLI:
     def list_connections(self, input_list: List[str]) -> None:
         """Handle list connections command"""
         self.connection_manager.list_connections()
-
-    def agent_model(self, input_list: List[str]) -> None:
-        """Handle agent model command"""
-        if self.agent is None:
-            logger.info("No agent is currently loaded. Use 'load-agent' to load an agent.")
-            return
-
-        # Show current provider and ask if user wants to change it
-        logger.info(f"Current Agent's Model Provider: {self.agent.model_provider}")
-        response = input("Do you want to change the model provider? (y/n): ")
-        if response.lower() == 'y':
-            # Have the user select a model provider
-            valid_provider_chosen = False
-            while not valid_provider_chosen:
-                logger.info("Available Model Providers:")
-                model_providers = ["openai"] # TODO: List all possible valid LLM provider connections
-                for provider in model_providers:
-                    logger.info(f"- {provider}")
-                response = input("\nPlease enter the model provider you prefer: ")
-                if response in model_providers:
-                    valid_provider_chosen = True
-                else:
-                    logger.info("Not a valid model provider. Please try again.")
-            result = self.agent.set_preferred_model_provider(response)
-            logger.info(f"Result: Set model provider to {response}. Make sure you have selected a valid model for this provider!")
-        else:
-            logger.info("No changes made.")
-
-        # Show the current model and ask if the user wants to change it
-        logger.info(f"\nCurrent Agent's Preferred LLM Model: {self.agent.model}")
-        response = input("Do you want to change the model? (y/n): ")
-        if response.lower() == 'y':
-            # Have the user select a model provider
-            self.agent.list_available_models()
-            response = input("\nPlease enter the model you prefer: ")
-            result = self.agent.set_preferred_model(response)
-            logger.info(f"Result: {result}")
-        else:
-            logger.info("No changes made.")
 
     def exit(self, input_list: List[str]) -> None:
         """Exit the CLI gracefully"""

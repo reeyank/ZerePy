@@ -1,5 +1,4 @@
-import os
-from dotenv import load_dotenv
+from src.connections.anthropic_connection import AnthropicConnection
 from src.connections.openai_connection import OpenAIConnection
 from src.connections.twitter_connection import TwitterConnection
 
@@ -8,6 +7,7 @@ class ConnectionManager:
         self.connections = {
             'twitter': TwitterConnection(),
             'openai': OpenAIConnection(),
+            'anthropic': AnthropicConnection()
         }
 
         # Define action parameter requirements
@@ -123,3 +123,10 @@ class ConnectionManager:
         except Exception as e:
             print(f"\nAn error occurred: {e}")
             return None
+
+    def get_model_providers(self):
+        model_providers = []
+        for connection in self.connections.keys():
+            if self.connections[connection].is_llm_provider():
+                model_providers.append(connection)
+        return model_providers

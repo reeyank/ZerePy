@@ -181,6 +181,10 @@ class TwitterConnection(BaseConnection):
             raise ValueError(error_msg)
         logger.debug(f"Tweet text validation passed for {context.lower()}")
 
+
+    def is_llm_provider(self):
+        return False
+
     def perform_action(self, action_name: str, **kwargs) -> Any:
         """Implementation of abstract method from BaseConnection"""
         logger.debug(f"Performing action: {action_name}")
