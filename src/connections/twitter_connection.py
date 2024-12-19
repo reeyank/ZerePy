@@ -32,7 +32,7 @@ class TwitterConnection(BaseConnection):
 
     def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Validate Twitter configuration from JSON"""
-        required_fields = ["timeline_read_count", "replies_per_tweet"]
+        required_fields = ["timeline_read_count", "self_reply_chance", "tweet_interval"]
         missing_fields = [field for field in required_fields if field not in config]
         
         if missing_fields:
@@ -40,9 +40,12 @@ class TwitterConnection(BaseConnection):
             
         if not isinstance(config["timeline_read_count"], int) or config["timeline_read_count"] <= 0:
             raise ValueError("timeline_read_count must be a positive integer")
-            
-        if not isinstance(config["replies_per_tweet"], int) or config["replies_per_tweet"] <= 0:
-            raise ValueError("replies_per_tweet must be a positive integer")
+
+        if not isinstance(config["self_reply_chance"], float) or config["self_reply_chance"] < 0:
+            raise ValueError("self_reply_chance must be 0 or greater")
+
+        if not isinstance(config["tweet_interval"], int) or config["tweet_interval"] <= 0:
+            raise ValueError("tweet_interval must be a positive integer")
             
         return config
 

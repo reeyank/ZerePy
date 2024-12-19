@@ -20,11 +20,6 @@
     {
       "name": "twitter",
       "timeline_read_count": 10,
-      "replies_per_tweet": 5,
-      "interaction_weights": {
-        "like": 0.2,
-        "reply": 0.8
-      },
       "self_reply_chance": 0.05,
       "tweet_interval": 900
     },
@@ -36,5 +31,10 @@
       "name": "anthropic",
       "model": "claude-3-5-sonnet-20241022"
     }
+  ],
+  "tasks": [
+    {"name": "post-tweet", "weight": 1},
+    {"name": "reply-to-tweet", "weight": 1},
+    {"name": "like-tweet", "weight": 1}
   ]
 }
