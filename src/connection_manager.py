@@ -5,6 +5,8 @@ from src.connections.anthropic_connection import AnthropicConnection
 from src.connections.openai_connection import OpenAIConnection
 from src.connections.twitter_connection import TwitterConnection
 
+logger = logging.getLogger("connection_manager")
+
 class ConnectionManager:
     def __init__(self, agent_config):
         self.connections : Dict[str, BaseConnection] = {}
