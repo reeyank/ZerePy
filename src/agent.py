@@ -195,14 +195,14 @@ class ZerePyAgent:
                                     logger.info("✅ Reply posted successfully!")
 
                     # Delay between iterations (convert minutes to seconds)
-                    logger.info(f"\n⏳ Waiting {self.loop_delay} minutes before next check...")
+                    logger.info(f"\n⏳ Waiting {self.loop_delay} seconds before next check...")
                     print_h_bar()
-                    time.sleep(self.loop_delay * 60)  # Convert minutes to seconds
+                    time.sleep(self.loop_delay) 
 
                 except Exception as e:
                     logger.error(f"\n❌ Error in agent loop iteration: {e}")
-                    logger.info(f"⏳ Waiting {self.loop_delay} minutes before retrying...")
-                    time.sleep(self.loop_delay * 60)  # Convert minutes to seconds
+                    logger.info(f"⏳ Waiting {self.loop_delay} seconds before retrying...")
+                    time.sleep(self.loop_delay)  
 
         except KeyboardInterrupt:
             logger.info("\n🛑 Agent loop stopped by user.")
