@@ -1,108 +1,92 @@
-import json
 import os
 import logging
-from typing import Dict, Any
-from dotenv import set_key, load_dotenv
+from typing import Dict, Any, List
 from requests_oauthlib import OAuth1Session
-from src.connections.base_connection import BaseConnection
-from src.helpers import print_h_bar
+from dotenv import set_key, load_dotenv
 import tweepy
+from src.connections.base_connection import BaseConnection, Action, ActionParameter
+from src.helpers import print_h_bar
 
-# Configure module logger
 logger = logging.getLogger("connections.twitter_connection")
 
 class TwitterConnectionError(Exception):
     """Base exception for Twitter connection errors"""
     pass
 
-
 class TwitterConfigurationError(TwitterConnectionError):
     """Raised when there are configuration/credential issues"""
     pass
-
 
 class TwitterAPIError(TwitterConnectionError):
     """Raised when Twitter API requests fail"""
     pass
 
-
 class TwitterConnection(BaseConnection):
-
-    def __init__(self):
-        super().__init__()
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
         self._oauth_session = None
+
+    @property
+    def is_llm_provider(self) -> bool:
+        return False
+
+    def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate Twitter configuration from JSON"""
+        required_fields = ["timeline_read_count", "replies_per_tweet"]
+        missing_fields = [field for field in required_fields if field not in config]
+        
+        if missing_fields:
+            raise ValueError(f"Missing required configuration fields: {', '.join(missing_fields)}")
+            
+        if not isinstance(config["timeline_read_count"], int) or config["timeline_read_count"] <= 0:
+            raise ValueError("timeline_read_count must be a positive integer")
+            
+        if not isinstance(config["replies_per_tweet"], int) or config["replies_per_tweet"] <= 0:
+            raise ValueError("replies_per_tweet must be a positive integer")
+            
+        return config
+
+    def register_actions(self) -> None:
+        """Register available Twitter actions"""
         self.actions = {
-            "get-latest-tweets": {
-                "func": self.get_latest_tweets,
-                "args": {
-                    "username": "str",
-                    "count": "int"
-                }
-            },
-            "post-tweet": {
-                "func": self.post_tweet,
-                "args": {
-                    "message": "str"
-                },
-            },
-            "read-timeline": {
-                "func": self.read_timeline,
-                "args": {
-                    "count": "int"
-                },
-            },
-            "like-tweet": {
-                "func": self.like_tweet,
-                "args": {
-                    "tweet_id": "str"
-                },
-            },
-            "reply-to-tweet": {
-                "func": self.reply_to_tweet,
-                "args": {
-                    "tweet_id": "str",
-                    "message": "str"
-                },
-            }
+            "get-latest-tweets": Action(
+                name="get-latest-tweets",
+                parameters=[
+                    ActionParameter("username", True, str, "Twitter username to get tweets from"),
+                    ActionParameter("count", True, int, "Number of tweets to retrieve")
+                ],
+                description="Get the latest tweets from a user"
+            ),
+            "post-tweet": Action(
+                name="post-tweet",
+                parameters=[
+                    ActionParameter("message", True, str, "Text content of the tweet")
+                ],
+                description="Post a new tweet"
+            ),
+            "read-timeline": Action(
+                name="read-timeline",
+                parameters=[
+                    ActionParameter("count", False, int, "Number of tweets to read from timeline")
+                ],
+                description="Read tweets from user's timeline"
+            ),
+            "like-tweet": Action(
+                name="like-tweet",
+                parameters=[
+                    ActionParameter("tweet_id", True, str, "ID of the tweet to like")
+                ],
+                description="Like a specific tweet"
+            ),
+            "reply-to-tweet": Action(
+                name="reply-to-tweet",
+                parameters=[
+                    ActionParameter("tweet_id", True, str, "ID of the tweet to reply to"),
+                    ActionParameter("message", True, str, "Reply message content")
+                ],
+                description="Reply to an existing tweet"
+            )
         }
-        logger.debug("TwitterConnection initialized")
-
-    def _make_request(self, method: str, endpoint: str, **kwargs) -> dict:
-        """
-        Make a request to the Twitter API with error handling
-
-        Args:
-            method: HTTP method ('get', 'post', etc.)
-            endpoint: API endpoint path
-            **kwargs: Additional request parameters
-
-        Returns:
-            Dict containing the API response
-        """
-        logger.debug(f"Making {method.upper()} request to {endpoint}")
-        try:
-            oauth = self._get_oauth()
-            full_url = f"https://api.twitter.com/2/{endpoint.lstrip('/')}"
-
-            response = getattr(oauth, method.lower())(full_url, **kwargs)
-            expected_status = 201 if method.lower() == 'post' else 200
-
-            if response.status_code != expected_status:
-                logger.error(
-                    f"Request failed: {response.status_code} - {response.text}"
-                )
-                raise TwitterAPIError(
-                    f"Request failed with status {response.status_code}: {response.text}"
-                )
-
-            logger.debug(f"Request successful: {response.status_code}")
-            return response.json()
-
-        except Exception as e:
-            logger.error(f"API request failed: {str(e)}")
-            if isinstance(e, TwitterAPIError):
-                raise
-            raise TwitterAPIError(f"API request failed: {str(e)}")
 
     def _get_credentials(self) -> Dict[str, str]:
         """Get Twitter credentials from environment with validation"""
@@ -128,11 +112,43 @@ class TwitterConnection(BaseConnection):
 
         if missing:
             error_msg = f"Missing Twitter credentials: {', '.join(missing)}"
-            logger.error(error_msg)
             raise TwitterConfigurationError(error_msg)
 
         logger.debug("All required credentials found")
         return credentials
+     
+    def _make_request(self, method: str, endpoint: str, **kwargs) -> dict:
+        """
+        Make a request to the Twitter API with error handling
+
+        Args:
+            method: HTTP method ('get', 'post', etc.)
+            endpoint: API endpoint path
+            **kwargs: Additional request parameters
+
+        Returns:
+            Dict containing the API response
+        """
+        logger.debug(f"Making {method.upper()} request to {endpoint}")
+        try:
+            oauth = self._get_oauth()
+            full_url = f"https://api.twitter.com/2/{endpoint.lstrip('/')}"
+
+            response = getattr(oauth, method.lower())(full_url, **kwargs)
+
+            if response.status_code not in [200, 201]:
+                logger.error(
+                    f"Request failed: {response.status_code} - {response.text}"
+                )
+                raise TwitterAPIError(
+                    f"Request failed with status {response.status_code}: {response.text}"
+                )
+
+            logger.debug(f"Request successful: {response.status_code}")
+            return response.json()
+
+        except Exception as e:
+            raise TwitterAPIError(f"API request failed: {str(e)}")
 
     def _get_oauth(self) -> OAuth1Session:
         """Get or create OAuth session using stored credentials"""
@@ -180,19 +196,6 @@ class TwitterConnection(BaseConnection):
             logger.error(error_msg)
             raise ValueError(error_msg)
         logger.debug(f"Tweet text validation passed for {context.lower()}")
-
-
-    def is_llm_provider(self):
-        return False
-
-    def perform_action(self, action_name: str, **kwargs) -> Any:
-        """Implementation of abstract method from BaseConnection"""
-        logger.debug(f"Performing action: {action_name}")
-        if action_name in self.actions:
-            return self.actions[action_name]["func"](**kwargs)
-        error_msg = f"Unknown action: {action_name}"
-        logger.error(error_msg)
-        raise TwitterConnectionError(error_msg)
 
     def configure(self) -> None:
         """Sets up Twitter API authentication"""
@@ -308,7 +311,7 @@ class TwitterConnection(BaseConnection):
             logger.error(error_msg)
             raise TwitterConfigurationError(error_msg)
 
-    def is_configured(self, verbose=True) -> bool:
+    def is_configured(self, verbose = False) -> bool:
         """Check if Twitter credentials are configured and valid"""
         logger.debug("Checking Twitter configuration status")
         try:
@@ -335,8 +338,30 @@ class TwitterConnection(BaseConnection):
                 logger.error(f"Configuration validation failed: {error_msg}")
             return False
 
-    def read_timeline(self, count=10, **kwargs) -> list:
+    def perform_action(self, action_name: str, kwargs) -> Any:
+        """Execute a Twitter action with validation"""
+        if action_name not in self.actions:
+            raise KeyError(f"Unknown action: {action_name}")
+
+        action = self.actions[action_name]
+        errors = action.validate_params(kwargs)
+        if errors:
+            raise ValueError(f"Invalid parameters: {', '.join(errors)}")
+
+        # Add config parameters if not provided
+        if action_name == "read-timeline" and "count" not in kwargs:
+            kwargs["count"] = self.config["timeline_read_count"]
+
+        # Call the appropriate method based on action name
+        method_name = action_name.replace('-', '_')
+        method = getattr(self, method_name)
+        return method(**kwargs)
+
+    def read_timeline(self, count: int = None, **kwargs) -> list:
         """Read tweets from the user's timeline"""
+        if count is None:
+            count = self.config["timeline_read_count"]
+            
         logger.debug(f"Reading timeline, count: {count}")
         credentials = self._get_credentials()
 
@@ -350,12 +375,12 @@ class TwitterConnection(BaseConnection):
         response = self._make_request(
             'get',
             f"users/{credentials['TWITTER_USER_ID']}/timelines/reverse_chronological",
-            params=params)
+            params=params
+        )
 
         tweets = response.get("data", [])
         user_info = response.get("includes", {}).get("users", [])
 
-        # Process user information
         user_dict = {
             user['id']: {
                 'name': user['name'],
@@ -364,7 +389,6 @@ class TwitterConnection(BaseConnection):
             for user in user_info
         }
 
-        # Enrich tweets with user information
         for tweet in tweets:
             author_id = tweet['author_id']
             author_info = user_dict.get(author_id, {
@@ -388,7 +412,7 @@ class TwitterConnection(BaseConnection):
 
         credentials = self._get_credentials()
         params = {
-            "tweet.fields": "created_at,public_metrics,text",
+            "tweet.fields": "created_at,text",
             "max_results": min(count, 100),
             "exclude": "retweets,replies"
         }
