@@ -117,7 +117,9 @@ class ZerePyAgent:
                         logger.info("\n📝 GENERATING NEW TWEET")
                         print_h_bar()
 
-                        prompt = "Generate an engaging tweet. Don't include hashtags, links or emojis. Keep it under 280 characters."
+                        prompt = ("Generate an engaging tweet. Don't include any hashtags, links or emojis. Keep it under 280 characters."
+                        "The tweets should be pure commentary, do not shill any coins or projects apart from Blormmy. Not repeat any of the" 
+                        "tweets that were given as example. Avoid the words AI and crypto.")
                         tweet_text = self.prompt_llm(prompt)
 
                         if tweet_text:
