@@ -141,5 +141,5 @@ class ConnectionManager:
         """Get a list of all LLM provider connections"""
         return [
             name for name, conn in self.connections.items() 
-            if conn.is_configured and getattr(conn, 'is_llm_provider', lambda: False)()
+            if conn.is_configured() and getattr(conn, 'is_llm_provider', lambda: False)
         ]
