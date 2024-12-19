@@ -5,6 +5,8 @@ from src.connections.anthropic_connection import AnthropicConnection
 from src.connections.openai_connection import OpenAIConnection
 from src.connections.twitter_connection import TwitterConnection
 
+logger = logging.getLogger("connection_manager")
+
 class ConnectionManager:
     def __init__(self, agent_config):
         self.connections : Dict[str, BaseConnection] = {}
@@ -141,5 +143,5 @@ class ConnectionManager:
         """Get a list of all LLM provider connections"""
         return [
             name for name, conn in self.connections.items() 
-            if conn.is_configured and getattr(conn, 'is_llm_provider', lambda: False)()
+            if conn.is_configured() and getattr(conn, 'is_llm_provider', lambda: False)
         ]

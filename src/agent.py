@@ -44,6 +44,7 @@ class ZerePyAgent:
             
             # Get first available LLM provider and its model
             llm_providers = self.connection_manager.get_model_providers()
+            logger.info(llm_providers)
             if not llm_providers:
                 raise ValueError("No configured LLM provider found")
             self.model_provider = llm_providers[0]
@@ -88,16 +89,10 @@ class ZerePyAgent:
         system_prompt = system_prompt or self._construct_system_prompt()
         
         return self.connection_manager.perform_action(
-            connection=self.model_provider,
-            action="generate-text",
-            prompt=prompt,
-            system_prompt=system_prompt,
-            model=self.model
+            connection_name=self.model_provider,
+            action_name="generate-text",
+            params=[prompt, system_prompt]
         )
-
-    def perform_action(self, connection: str, action: str, **kwargs) -> None:
-        """Execute a specific action on a connection"""
-        return self.connection_manager.perform_action(connection, action, **kwargs)
 
     def loop(self):
         """Main agent loop for autonomous behavior"""
@@ -107,8 +102,8 @@ class ZerePyAgent:
 
         time.sleep(2)
         logger.info("Starting loop in 5 seconds...")
-        for i in range(5):
-            logger.info(f"{i+1}...")
+        for i in range(5, 0, -1):
+            logger.info(f"{i}...")
             time.sleep(1)
 
         last_tweet_time = 0
@@ -129,9 +124,9 @@ class ZerePyAgent:
                             logger.info("\n🚀 Posting tweet:")
                             logger.info(f"'{tweet_text}'")
                             self.connection_manager.perform_action(
-                                connection="twitter",
-                                action="post-tweet",
-                                message=tweet_text
+                                connection_name="twitter",
+                                action_name="post-tweet",
+                                params=[tweet_text]
                             )
                             last_tweet_time = current_time
                             logger.info("\n✅ Tweet posted successfully!")
@@ -141,9 +136,9 @@ class ZerePyAgent:
                     print_h_bar()
 
                     timeline_tweets = self.connection_manager.perform_action(
-                        connection="twitter",
-                        action="read-timeline",
-                        count=self.timeline_read_count
+                        connection_name="twitter",
+                        action_name="read-timeline",
+                        params=[]
                     )
 
                     if timeline_tweets:
@@ -171,9 +166,9 @@ class ZerePyAgent:
                             if action == 'like':
                                 logger.info(f"\n❤️ LIKING TWEET: {tweet.get('text', '')[:50]}...")
                                 self.connection_manager.perform_action(
-                                    connection="twitter",
-                                    action="like-tweet",
-                                    tweet_id=tweet_id
+                                    connection_name="twitter",
+                                    action_name="like-tweet",
+                                    params=[tweet_id]
                                 )
                                 logger.info("✅ Tweet liked successfully!")
 
@@ -191,10 +186,9 @@ class ZerePyAgent:
                                 if reply_text:
                                     logger.info(f"\n🚀 Posting reply: '{reply_text}'")
                                     self.connection_manager.perform_action(
-                                        connection="twitter",
-                                        action="reply-to-tweet",
-                                        tweet_id=tweet_id,
-                                        message=reply_text
+                                        connection_name="twitter",
+                                        action_name="reply-to-tweet",
+                                        params=[tweet_id, reply_text]
                                     )
                                     logger.info("✅ Reply posted successfully!")
 
