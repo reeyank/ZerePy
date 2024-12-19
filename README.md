@@ -1,7 +1,6 @@
 # ZerePy
 
-We're building ZerePy, an open-source Python framework designed to let you deploy your own agents on X, powered by 
-OpenAI or Anthropic LLMs.
+ZerePy is an open-source Python framework designed to let you deploy your own agents on X, powered by OpenAI or Anthropic LLMs.
 
 ZerePy is built from a modularized version of the Zerebro backend. With ZerePy, you can launch your own agent with 
 similar core functionality as Zerebro. For creative outputs, you'll need to fine-tune your own model.
@@ -51,11 +50,9 @@ poetry shell
 poetry run python main.py
 ```
 
-## Getting Started
+## Quickstart
 
-1. Fork this template
-2. Install dependencies by clicking Run
-3. Configure your connections:
+1. Configure your connections:
    ```
    configure-connection twitter
    configure-connection openai
@@ -66,18 +63,39 @@ poetry run python main.py
    ```
 5. Start your agent:
    ```
-   agent-loop
+   start
    ```
+
 ## Creating Your Own Agent
 
 Create a new JSON file in the `agents` directory following this structure:
 
 ```json
 {
-  "name": "YourAgent",
-  "model": "gpt-3.5-turbo",
-  "bio": "Your agent's description",
-  "moderated": true
+ "name": "ExampleAgent",
+ "bio": [
+   "You are ExampleAgent, the example agent created to showcase the capabilities of ZerePy...",
+ ],
+ "traits": [
+   "Curious",
+   "Creative",
+ ],
+ "examples": [
+   "This is an example tweet.",
+   "This is another example tweet."
+ ],
+ "loop_delay": 30,
+ "config": [
+   {
+     "name": "twitter",
+     "timeline_read_count": 10,
+     "replies_per_tweet": 5
+   },
+   {
+     "name": "openai",
+     "model": "gpt-3.5-turbo"
+   }
+ ]
 }
 ```
 
