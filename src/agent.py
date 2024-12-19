@@ -40,31 +40,27 @@ class ZerePyAgent:
             self.timeline_read_count = twitter_config.get("timeline_read_count", 10)
             self.interaction_weights = twitter_config.get("interaction_weights", {"like": 0.2, "reply": 0.8})
             self.self_reply_chance = twitter_config.get("self_reply_chance", 0.05)
-            self.tweet_interval = twitter_config.get("tweet_interval", 900)
-            
-            # Get first available LLM provider and its model
-            llm_providers = self.connection_manager.get_model_providers()
-            logger.info(llm_providers)
-            if not llm_providers:
-                raise ValueError("No configured LLM provider found")
-            self.model_provider = llm_providers[0]
-            
-            # Get the model from the provider's config
-            provider_config = next((config for config in agent_dict["config"] if config["name"] == self.model_provider), None)
-            if not provider_config or "model" not in provider_config:
-                raise ValueError(f"No model configured for provider {self.model_provider}")
-            self.model = provider_config["model"]
-            
-            # Load Twitter username for self-reply detection
-            load_dotenv()
-            self.username = os.getenv('TWITTER_USERNAME', '').lower()
+            self.tweet_interval = twitter_config.get("tweet_interval", 900) 
+
+            self.is_llm_set = False
             
             # Cache for system prompt
             self._system_prompt = None
             
         except Exception as e:
-            logger.error("Encountered an error while initializing ZerePyAgent")
+            logger.error("Could not load ZerePy agent")
             raise e
+        
+    def _setup_llm_provider(self):           
+        # Get first available LLM provider and its model
+        llm_providers = self.connection_manager.get_model_providers()
+        if not llm_providers:
+            raise ValueError("No configured LLM provider found")
+        self.model_provider = llm_providers[0]
+        
+        # Load Twitter username for self-reply detection
+        load_dotenv()
+        self.username = os.getenv('TWITTER_USERNAME', '').lower()
 
     def _construct_system_prompt(self) -> str:
         """Construct the system prompt from agent configuration"""
@@ -96,6 +92,9 @@ class ZerePyAgent:
 
     def loop(self):
         """Main agent loop for autonomous behavior"""
+        if not self.is_llm_set:
+            self._setup_llm_provider()
+
         logger.info("\n🚀 Starting agent loop...")
         logger.info("Press Ctrl+C at any time to stop the loop.")
         print_h_bar()
