@@ -89,6 +89,9 @@ class ZerePyAgent:
             action_name="generate-text",
             params=[prompt, system_prompt]
         )
+    
+    def perform_action(self, connection: str, action: str, **kwargs) -> None:
+        return self.connection_manager.perform_action(connection, action, **kwargs)
 
     def loop(self):
         """Main agent loop for autonomous behavior"""
