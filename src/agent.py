@@ -29,7 +29,7 @@ class ZerePyAgent:
             self.bio = agent_dict["bio"]
             self.traits = agent_dict["traits"]
             self.examples = agent_dict["examples"]
-            self.loop_delay = agent_dict["loop_delay"]  # This is in minutes
+            self.loop_delay = agent_dict["loop_delay"] 
             self.connection_manager = ConnectionManager(agent_dict["config"])
             
             # Extract Twitter config
@@ -146,7 +146,7 @@ class ZerePyAgent:
                     if timeline_tweets:
                         logger.info(f"\nFound {len(timeline_tweets)} tweets to process")
                         # Add delay between finding and processing tweets
-                        time.sleep(30)
+                        time.sleep(45)
                         
                         # Process each tweet
                         for tweet in timeline_tweets:
@@ -194,7 +194,6 @@ class ZerePyAgent:
                                     )
                                     logger.info("✅ Reply posted successfully!")
 
-                    # Delay between iterations (convert minutes to seconds)
                     logger.info(f"\n⏳ Waiting {self.loop_delay} seconds before next check...")
                     print_h_bar()
                     time.sleep(self.loop_delay) 
