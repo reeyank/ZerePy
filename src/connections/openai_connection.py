@@ -1,13 +1,10 @@
 import logging
 import os
-from operator import truediv
-
+from typing import Dict, Any, List
 from dotenv import load_dotenv, set_key
-from src.connections.base_connection import BaseConnection
 from openai import OpenAI
-from typing import Dict, Any
+from src.connections.base_connection import BaseConnection, Action, ActionParameter
 
-# Configure module logger
 logger = logging.getLogger(__name__)
 
 class OpenAIConnectionError(Exception):
@@ -23,106 +20,125 @@ class OpenAIAPIError(OpenAIConnectionError):
     pass
 
 class OpenAIConnection(BaseConnection):
-    def __init__(self):
-        super().__init__()
-        self.actions={
-            "generate-text": {
-                "func": self.generate_text,
-                "args": {
-                    "prompt": "str",
-                    "system_prompt": "str",
-                    "model": "str"
-                }
-            },
-            "check-model": {
-                "func": self.check_model,
-                "args": {"model": "str"}
-            },
-            "list-models": {
-                "func": self.list_models,
-                "args": {}
-            }
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        self._client = None
+
+    @property
+    def is_llm_provider(self) -> bool:
+        return True
+
+    def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate OpenAI configuration from JSON"""
+        required_fields = ["model"]
+        missing_fields = [field for field in required_fields if field not in config]
+        
+        if missing_fields:
+            raise ValueError(f"Missing required configuration fields: {', '.join(missing_fields)}")
+            
+        # Validate model exists (will be checked in detail during configure)
+        if not isinstance(config["model"], str):
+            raise ValueError("model must be a string")
+            
+        return config
+
+    def register_actions(self) -> None:
+        """Register available OpenAI actions"""
+        self.actions = {
+            "generate-text": Action(
+                name="generate-text",
+                parameters=[
+                    ActionParameter("prompt", True, str, "The input prompt for text generation"),
+                    ActionParameter("system_prompt", True, str, "System prompt to guide the model"),
+                    ActionParameter("model", False, str, "Model to use for generation")
+                ],
+                description="Generate text using OpenAI models"
+            ),
+            "check-model": Action(
+                name="check-model",
+                parameters=[
+                    ActionParameter("model", True, str, "Model name to check availability")
+                ],
+                description="Check if a specific model is available"
+            ),
+            "list-models": Action(
+                name="list-models",
+                parameters=[],
+                description="List all available OpenAI models"
+            )
         }
 
-    def configure(self):
+    def _get_client(self) -> OpenAI:
+        """Get or create OpenAI client"""
+        if not self._client:
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise OpenAIConfigurationError("OpenAI API key not found in environment")
+            self._client = OpenAI(api_key=api_key)
+        return self._client
+
+    def configure(self) -> bool:
         """Sets up OpenAI API authentication"""
         print("\n🤖 OPENAI API SETUP")
 
-        # Check if already configured
-        if self.is_configured(verbose=False):
+        if self.is_configured():
             print("\nOpenAI API is already configured.")
             response = input("Do you want to reconfigure? (y/n): ")
             if response.lower() != 'y':
-                return
+                return True
 
-        # Get API key
         print("\n📝 To get your OpenAI API credentials:")
         print("1. Go to https://platform.openai.com/account/api-keys")
-        print("2. Create a new project or open an exiting one.")
+        print("2. Create a new project or open an existing one.")
         print("3. In your project settings, navigate to the API keys section and create a new API key")
+        
         api_key = input("\nEnter your OpenAI API key: ")
 
         try:
-            # Create .env file if it doesn't exist
             if not os.path.exists('.env'):
                 with open('.env', 'w') as f:
                     f.write('')
 
-            # Save API key to .env file
             set_key('.env', 'OPENAI_API_KEY', api_key)
+            
+            # Validate the API key by trying to list models
+            client = OpenAI(api_key=api_key)
+            client.models.list()
 
             print("\n✅ OpenAI API configuration successfully saved!")
             print("Your API key has been stored in the .env file.")
+            return True
 
         except Exception as e:
-            print(f"\n❌ An error occurred during setup: {str(e)}")
-            return
-
-    def is_configured(self, verbose=True) -> bool:
-        """Checks if OpenAI API key is configured and valid"""
-        if not os.path.exists('.env'):
+            logger.error(f"Configuration failed: {e}")
             return False
 
+    def is_configured(self, verbose = False) -> bool:
+        """Check if OpenAI API key is configured and valid"""
         try:
-            # Load env file variables
             load_dotenv()
             api_key = os.getenv('OPENAI_API_KEY')
-
-            # Check if values present
             if not api_key:
                 return False
 
-            # Initialize the client
             client = OpenAI(api_key=api_key)
-            
-            # Try to make a minimal API call to validate the key
-            models = [model.id for model in client.models.list().data]
-
+            client.models.list()
             return True
             
         except Exception as e:
             if verbose:
-                print("❌ There was an error validating your OpenAI credentials:", e)
+                logger.debug(f"Configuration check failed: {e}")
             return False
 
-    def is_llm_provider(self):
-        return True
-
-    def perform_action(self, action_name: str, **kwargs) -> Any:
-        """Implementation of abstract method from BaseConnection"""
-        logger.debug(f"Performing action: {action_name}")
-        if action_name in self.actions:
-            return self.actions[action_name]["func"](**kwargs)
-        error_msg = f"Unknown action: {action_name}"
-        logger.error(error_msg)
-        raise OpenAIConnectionError(error_msg)
-
-    def generate_text(self, prompt : str, system_prompt : str, model : str, **kwargs):
+    def generate_text(self, prompt: str, system_prompt: str, model: str = None, **kwargs) -> str:
+        """Generate text using OpenAI models"""
         try:
-            # Initialize the client
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            client = self._get_client()
+            
+            # Use configured model if none provided
+            if not model:
+                model = self.config["model"]
 
-            # Make the API call
             completion = client.chat.completions.create(
                 model=model,
                 messages=[
@@ -131,20 +147,17 @@ class OpenAIConnection(BaseConnection):
                 ],
             )
 
-            # Return the response
-            response_message = completion.choices[0].message.content
-            return response_message
+            return completion.choices[0].message.content
+            
         except Exception as e:
-            raise OpenAIAPIError(e)
+            raise OpenAIAPIError(f"Text generation failed: {e}")
 
     def check_model(self, model, **kwargs):
         try:
-            # Make sure model exists
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            client = self._get_client
 
             try:
                 response = client.models.retrieve(model=model)
-
                 # If we get here, the model exists
                 return True
             except Exception:
@@ -152,26 +165,43 @@ class OpenAIConnection(BaseConnection):
         except Exception as e:
             raise OpenAIAPIError(e)
 
-    def list_models(self, **kwargs):
+    def list_models(self, **kwargs) -> None:
+        """List all available OpenAI models"""
         try:
-            # Get available models
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            client = self._get_client()
             response = client.models.list().data
-            model_ids = [model.id for model in response]
-            fine_tuned_models = [model for model in response if model.owned_by in ["organization", "user", "organization-owner"]]
+            
+            fine_tuned_models = [
+                model for model in response 
+                if model.owned_by in ["organization", "user", "organization-owner"]
+            ]
 
-            # List available models
-            logging.info("\nGPT MODELS:")
-            logging.info("1. gpt-3.5-turbo")
-            logging.info("2. gpt-4")
-            logging.info("3. gpt-4-turbo")
-            logging.info("4. gpt-4o")
-            logging.info("5. gpt-4o-mini")
+            logger.info("\nGPT MODELS:")
+            logger.info("1. gpt-3.5-turbo")
+            logger.info("2. gpt-4")
+            logger.info("3. gpt-4-turbo")
+            logger.info("4. gpt-4o")
+            logger.info("5. gpt-4o-mini")
+            
             if fine_tuned_models:
-                logging.info("\nFINE-TUNED MODELS:")
+                logger.info("\nFINE-TUNED MODELS:")
                 for i, model in enumerate(fine_tuned_models):
-                    logging.info(f"{i+1}. {model.id}")
-
-            return
+                    logger.info(f"{i+1}. {model.id}")
+                    
         except Exception as e:
-            raise OpenAIAPIError(e)
+            raise OpenAIAPIError(f"Listing models failed: {e}")
+    
+    def perform_action(self, action_name: str, kwargs) -> Any:
+        """Execute a Twitter action with validation"""
+        if action_name not in self.actions:
+            raise KeyError(f"Unknown action: {action_name}")
+
+        action = self.actions[action_name]
+        errors = action.validate_params(kwargs)
+        if errors:
+            raise ValueError(f"Invalid parameters: {', '.join(errors)}")
+
+        # Call the appropriate method based on action name
+        method_name = action_name.replace('-', '_')
+        method = getattr(self, method_name)
+        return method(**kwargs)
