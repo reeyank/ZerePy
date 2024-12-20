@@ -54,7 +54,7 @@ poetry shell
 poetry run python main.py
 ```
 
-## Quickstart
+## Quickstart to Start & Launch an Agent
 
 1. Configure your connections:
    ```
