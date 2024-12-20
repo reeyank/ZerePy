@@ -19,7 +19,7 @@ https://replit.com/@blormdev/ZerePy?v=1
 
 1. Fork the template (you will need you own Replit account)
 2. Click the run button on top
-3. Voila! your CLI should be ready to use, you can jump to the configuration section.
+3. Voila! your CLI should be ready to use, you can jump to the configuration section
 
 ## Requirements
 
@@ -36,9 +36,7 @@ API keys:
 
 ## Installation
 
-This project uses Poetry for dependency management. Here's how to get started:
-
-1. First, install Poetry if you haven't already:
+1. First, install Poetry for dependency management if you haven't already:
 
 Follow the steps here to use the official installation: https://python-poetry.org/docs/#installing-with-the-official-installer
 
