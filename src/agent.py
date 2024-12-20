@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from src.connection_manager import ConnectionManager
 from src.helpers import print_h_bar
 
-REQUIRED_FIELDS = ["name", "bio", "traits", "examples", "loop_delay", "config"]
+REQUIRED_FIELDS = ["name", "bio", "traits", "examples", "loop_delay", "config", "tasks"]
 
 logger = logging.getLogger("agent")
 
@@ -36,16 +36,22 @@ class ZerePyAgent:
             twitter_config = next((config for config in agent_dict["config"] if config["name"] == "twitter"), None)
             if not twitter_config:
                 raise KeyError("Twitter configuration is required")
-                
-            self.timeline_read_count = twitter_config.get("timeline_read_count", 10)
-            self.interaction_weights = twitter_config.get("interaction_weights", {"like": 0.2, "reply": 0.8})
+
+            # TODO: These should probably live in the related task parameters
             self.self_reply_chance = twitter_config.get("self_reply_chance", 0.05)
-            self.tweet_interval = twitter_config.get("tweet_interval", 900) 
+            self.tweet_interval = twitter_config.get("tweet_interval", 900)
 
             self.is_llm_set = False
             
             # Cache for system prompt
             self._system_prompt = None
+
+            # Extract loop tasks
+            self.tasks = agent_dict.get("tasks", [])
+            self.task_weights = [task.get("weight", 1) for task in self.tasks]
+
+            # Set up empty agent state
+            self.state = {}
             
         except Exception as e:
             logger.error("Could not load ZerePy agent")
@@ -113,45 +119,48 @@ class ZerePyAgent:
         try:
             while True:
                 try:
-                    # Check if it's time to post a new tweet
-                    current_time = time.time()
-                    if current_time - last_tweet_time >= self.tweet_interval:
-                        logger.info("\n📝 GENERATING NEW TWEET")
-                        print_h_bar()
+                    # REPLENISH INPUTS
+                    # TODO: Add more inputs to complexify agent behavior
+                    if "timeline_tweets" not in self.state or len(self.state["timeline_tweets"]) == 0:
+                        logger.info("\n👀 READING TIMELINE")
+                        self.state["timeline_tweets"] = self.connection_manager.perform_action(
+                            connection_name="twitter",
+                            action_name="read-timeline",
+                            params=[]
+                        )
 
-                        prompt = (f"Generate an engaging tweet. Don't include any hashtags, links or emojis. Keep it under 280 characters."
-                        "The tweets should be pure commentary, do not shill any coins or projects apart from {self.name}. Not repeat any of the" 
-                        "tweets that were given as example. Avoid the words AI and crypto.")
-                        tweet_text = self.prompt_llm(prompt)
+                    # CHOOSE AN ACTION
+                    # TODO: Add agentic action selection
+                    action = random.choices(self.tasks, weights=self.task_weights, k=1)[0]
+                    action_name = action["name"]
 
-                        if tweet_text:
-                            logger.info("\n🚀 Posting tweet:")
-                            logger.info(f"'{tweet_text}'")
-                            self.connection_manager.perform_action(
-                                connection_name="twitter",
-                                action_name="post-tweet",
-                                params=[tweet_text]
-                            )
-                            last_tweet_time = current_time
-                            logger.info("\n✅ Tweet posted successfully!")
+                    # PERFORM ACTION
+                    if action_name == "post-tweet":
+                        # Check if it's time to post a new tweet
+                        current_time = time.time()
+                        if current_time - last_tweet_time >= self.tweet_interval:
+                            logger.info("\n📝 GENERATING NEW TWEET")
+                            print_h_bar()
 
-                    # Read and interact with timeline
-                    logger.info("\n👀 READING TIMELINE")
-                    print_h_bar()
+                            prompt = (f"Generate an engaging tweet. Don't include any hashtags, links or emojis. Keep it under 280 characters."
+                                      "The tweets should be pure commentary, do not shill any coins or projects apart from {self.name}. Not repeat any of the"
+                                      "tweets that were given as example. Avoid the words AI and crypto.")
+                            tweet_text = self.prompt_llm(prompt)
 
-                    timeline_tweets = self.connection_manager.perform_action(
-                        connection_name="twitter",
-                        action_name="read-timeline",
-                        params=[]
-                    )
-
-                    if timeline_tweets:
-                        logger.info(f"\nFound {len(timeline_tweets)} tweets to process")
-                        # Add delay between finding and processing tweets
-                        time.sleep(45)
-                        
-                        # Process each tweet
-                        for tweet in timeline_tweets:
+                            if tweet_text:
+                                logger.info("\n🚀 Posting tweet:")
+                                logger.info(f"'{tweet_text}'")
+                                self.connection_manager.perform_action(
+                                    connection_name="twitter",
+                                    action_name="post-tweet",
+                                    params=[tweet_text]
+                                )
+                                last_tweet_time = current_time
+                                logger.info("\n✅ Tweet posted successfully!")
+                    elif action_name == "reply-to-tweet":
+                        if "timeline_tweets" in self.state and len(self.state["timeline_tweets"]) > 0:
+                            # Get next tweet from inputs
+                            tweet = self.state["timeline_tweets"].pop(0)
                             tweet_id = tweet.get('id')
                             if not tweet_id:
                                 continue
@@ -159,44 +168,49 @@ class ZerePyAgent:
                             # Check if it's our own tweet using username
                             is_own_tweet = tweet.get('author_username', '').lower() == self.username
                             if is_own_tweet and random.random() > self.self_reply_chance:
+                                logger.info("\n🤖 Skipping self-reply due to agent's choice.")
+                                # TODO: Should failure to self-reply still incur an action? or skip/shorten delay?
                                 continue
 
-                            # Choose interaction based on weights
-                            action = random.choices(
-                                list(self.interaction_weights.keys()),
-                                weights=list(self.interaction_weights.values())
-                            )[0]
+                            logger.info(f"\n💬 GENERATING REPLY to: {tweet.get('text', '')[:50]}...")
 
-                            if action == 'like':
-                                logger.info(f"\n❤️ LIKING TWEET: {tweet.get('text', '')[:50]}...")
+                            # Customize prompt based on whether it's a self-reply
+                            base_prompt = f"Generate a friendly, engaging reply to this tweet:" + tweet.get('text') + ". Keep it under 280 characters. Don't include any hashtags, links or emojis. Keep it under 280 characters."
+                            "The tweets should be pure commentary, do not shill any coins or projects apart from " + self.name + ". Do not repeat any of the"
+                            "tweets that were given as example. Avoid the words AI and crypto."
+                            if is_own_tweet:
+                                system_prompt = self._construct_system_prompt() + "\n\nYou are replying to your own previous tweet. Stay in character while building on your earlier thought."
+                                reply_text = self.prompt_llm(prompt=base_prompt, system_prompt=system_prompt)
+                            else:
+                                system_prompt = self._construct_system_prompt()
+                                reply_text = self.prompt_llm(prompt=base_prompt, system_prompt=system_prompt)
+
+                            if reply_text:
+                                logger.info(f"\n🚀 Posting reply: '{reply_text}'")
                                 self.connection_manager.perform_action(
                                     connection_name="twitter",
-                                    action_name="like-tweet",
-                                    params=[tweet_id]
+                                    action_name="reply-to-tweet",
+                                    params=[tweet_id, reply_text]
                                 )
-                                logger.info("✅ Tweet liked successfully!")
+                                logger.info("✅ Reply posted successfully!")
 
-                            elif action == 'reply':
-                                logger.info(f"\n💬 GENERATING REPLY to: {tweet.get('text', '')[:50]}...")
-                                
-                                # Customize prompt based on whether it's a self-reply
-                                base_prompt = f"Generate a friendly, engaging reply to this tweet: '{tweet.get('text')}'. Keep it under 280 characters. Don't include any hashtags, links or emojis. Keep it under 280 characters."
-                                "The tweets should be pure commentary, do not shill any coins or projects apart from {self.name}. Not repeat any of the" 
-                                "tweets that were given as example. Avoid the words AI and crypto."
-                                if is_own_tweet:
-                                    system_prompt = self._construct_system_prompt() + "\n\nYou are replying to your own previous tweet. Stay in character while building on your earlier thought."
-                                    reply_text = self.prompt_llm(prompt=base_prompt, system_prompt=system_prompt)
-                                else:
-                                    reply_text = self.prompt_llm(prompt=base_prompt)
+                    elif action_name == "like-tweet":
+                        if "timeline_tweets" in self.state and len(self.state["timeline_tweets"]) > 0:
+                            # Get next tweet from inputs
+                            tweet = self.state["timeline_tweets"].pop(0)
+                            tweet_id = tweet.get('id')
+                            if not tweet_id:
+                                continue
 
-                                if reply_text:
-                                    logger.info(f"\n🚀 Posting reply: '{reply_text}'")
-                                    self.connection_manager.perform_action(
-                                        connection_name="twitter",
-                                        action_name="reply-to-tweet",
-                                        params=[tweet_id, reply_text]
-                                    )
-                                    logger.info("✅ Reply posted successfully!")
+                            logger.info(f"\n👍 LIKING TWEET: {tweet.get('text', '')[:50]}...")
+
+                            self.connection_manager.perform_action(
+                                connection_name="twitter",
+                                action_name="like-tweet",
+                                params=[tweet_id]
+                            )
+                            logger.info("✅ Tweet liked successfully!")
+
 
                     logger.info(f"\n⏳ Waiting {self.loop_delay} seconds before next check...")
                     print_h_bar()
