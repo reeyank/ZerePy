@@ -23,10 +23,14 @@ curl -sSL https://install.python-poetry.org | python3 -
 2. Clone the repository:
 ```bash
 git clone https://github.com/blorm-network/ZerePy.git
-cd ZerePy
 ```
 
-3. Install dependencies:
+3. Go to the `zerepy` directory:
+```bash
+cd zerepy
+```
+
+4. Install dependencies:
 ```bash
 poetry install --no-root
 ```
