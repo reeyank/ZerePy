@@ -308,6 +308,7 @@ class TwitterConnection(BaseConnection):
             logger.info(
                 "Your API keys, secrets, and user ID have been stored in the .env file."
             )
+            return True
 
         except Exception as e:
             error_msg = f"Setup failed: {str(e)}"
