@@ -180,7 +180,7 @@ class ZerePyAgent:
                             logger.info(f"\n💬 GENERATING REPLY to: {tweet.get('text', '')[:50]}...")
 
                             # Customize prompt based on whether it's a self-reply
-                            base_prompt = (f"Generate a friendly, engaging reply to this tweet: {tweet.get('text')}. Keep it under 280 characters. Don't include any hashtags, links or emojis. Keep it under 280 characters. "
+                            base_prompt = (f"Generate a friendly, engaging reply to this tweet: {tweet.get('text')}. Keep it under 280 characters. Don't include any hashtags, links or emojis. "
                                 f"The tweets should be pure commentary, do not shill any coins or projects apart from {self.name}. Do not repeat any of the"
                                 "tweets that were given as example. Avoid the words AI and crypto.")
                             if is_own_tweet:
