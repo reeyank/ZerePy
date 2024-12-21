@@ -15,13 +15,13 @@
     "This is an example tweet.",
     "This is another example tweet."
   ],
-  "loop_delay": 60,
+  "loop_delay": 900,
   "config": [
     {
       "name": "twitter",
       "timeline_read_count": 10,
       "self_reply_chance": 0.05,
-      "tweet_interval": 900
+      "tweet_interval": 5400
     },
     {
       "name": "openai",

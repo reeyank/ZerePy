@@ -157,6 +157,11 @@ class ZerePyAgent:
                                 )
                                 last_tweet_time = current_time
                                 logger.info("\n✅ Tweet posted successfully!")
+                        else:
+                            logger.info("\n👀 Delaying post until tweet interval elapses...")
+                            print_h_bar()
+                            continue
+
                     elif action_name == "reply-to-tweet":
                         if "timeline_tweets" in self.state and len(self.state["timeline_tweets"]) > 0:
                             # Get next tweet from inputs
@@ -169,7 +174,7 @@ class ZerePyAgent:
                             is_own_tweet = tweet.get('author_username', '').lower() == self.username
                             if is_own_tweet and random.random() > self.self_reply_chance:
                                 logger.info("\n🤖 Skipping self-reply due to agent's choice.")
-                                # TODO: Should failure to self-reply still incur an action? or skip/shorten delay?
+                                print_h_bar()
                                 continue
 
                             logger.info(f"\n💬 GENERATING REPLY to: {tweet.get('text', '')[:50]}...")
@@ -212,7 +217,7 @@ class ZerePyAgent:
                             logger.info("✅ Tweet liked successfully!")
 
 
-                    logger.info(f"\n⏳ Waiting {self.loop_delay} seconds before next check...")
+                    logger.info(f"\n⏳ Waiting {self.loop_delay} seconds before next loop...")
                     print_h_bar()
                     time.sleep(self.loop_delay) 
 
