@@ -1,6 +1,6 @@
 import os
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any
 from requests_oauthlib import OAuth1Session
 from dotenv import set_key, load_dotenv
 import tweepy

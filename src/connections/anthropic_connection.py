@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Dict, Any, List
+from typing import Dict, Any
 from dotenv import load_dotenv, set_key
 from anthropic import Anthropic, NotFoundError
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
