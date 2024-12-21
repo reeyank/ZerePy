@@ -142,9 +142,9 @@ class ZerePyAgent:
                             logger.info("\n📝 GENERATING NEW TWEET")
                             print_h_bar()
 
-                            prompt = (f"Generate an engaging tweet. Don't include any hashtags, links or emojis. Keep it under 280 characters."
-                                      "The tweets should be pure commentary, do not shill any coins or projects apart from {self.name}. Not repeat any of the"
-                                      "tweets that were given as example. Avoid the words AI and crypto.")
+                            prompt = "Generate an engaging tweet. Don't include any hashtags, links or emojis. Keep it under 280 characters."\
+                                    f"The tweets should be pure commentary, do not shill any coins or projects apart from {self.name}. Do not repeat any of the"\
+                                    "tweets that were given as example. Avoid the words AI and crypto."
                             tweet_text = self.prompt_llm(prompt)
 
                             if tweet_text:
@@ -180,9 +180,9 @@ class ZerePyAgent:
                             logger.info(f"\n💬 GENERATING REPLY to: {tweet.get('text', '')[:50]}...")
 
                             # Customize prompt based on whether it's a self-reply
-                            base_prompt = f"Generate a friendly, engaging reply to this tweet:" + tweet.get('text') + ". Keep it under 280 characters. Don't include any hashtags, links or emojis. Keep it under 280 characters."
-                            "The tweets should be pure commentary, do not shill any coins or projects apart from " + self.name + ". Do not repeat any of the"
-                            "tweets that were given as example. Avoid the words AI and crypto."
+                            base_prompt = f"Generate a friendly, engaging reply to this tweet: {tweet.get('text')}. Keep it under 280 characters. Don't include any hashtags, links or emojis. Keep it under 280 characters. "\
+                                f"The tweets should be pure commentary, do not shill any coins or projects apart from {self.name}. Do not repeat any of the"\
+                                "tweets that were given as example. Avoid the words AI and crypto."
                             if is_own_tweet:
                                 system_prompt = self._construct_system_prompt() + "\n\nYou are replying to your own previous tweet. Stay in character while building on your earlier thought."
                                 reply_text = self.prompt_llm(prompt=base_prompt, system_prompt=system_prompt)
