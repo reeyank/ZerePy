@@ -116,7 +116,8 @@ Create a new JSON file in the `agents` directory following this structure:
     {
       "name": "twitter",
       "timeline_read_count": 10,
-      "tweet_interval": 900
+      "tweet_interval": 900,
+      "own_tweet_replies_count":2
     },
     {
       "name": "openai",
