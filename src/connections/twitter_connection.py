@@ -1,6 +1,6 @@
 import os
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 from requests_oauthlib import OAuth1Session
 from dotenv import set_key, load_dotenv
 import tweepy
@@ -32,7 +32,7 @@ class TwitterConnection(BaseConnection):
 
     def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Validate Twitter configuration from JSON"""
-        required_fields = ["timeline_read_count", "self_reply_chance", "tweet_interval"]
+        required_fields = ["timeline_read_count", "tweet_interval"]
         missing_fields = [field for field in required_fields if field not in config]
         
         if missing_fields:
@@ -40,9 +40,6 @@ class TwitterConnection(BaseConnection):
             
         if not isinstance(config["timeline_read_count"], int) or config["timeline_read_count"] <= 0:
             raise ValueError("timeline_read_count must be a positive integer")
-
-        if not isinstance(config["self_reply_chance"], float) or config["self_reply_chance"] < 0:
-            raise ValueError("self_reply_chance must be 0 or greater")
 
         if not isinstance(config["tweet_interval"], int) or config["tweet_interval"] <= 0:
             raise ValueError("tweet_interval must be a positive integer")
@@ -88,6 +85,13 @@ class TwitterConnection(BaseConnection):
                     ActionParameter("message", True, str, "Reply message content")
                 ],
                 description="Reply to an existing tweet"
+            ),
+            "get-tweet-replies": Action(
+                name="get-tweet-replies",
+                parameters=[
+                    ActionParameter("tweet_id", True, str, "ID of the tweet to query for replies")
+                ],
+                description="Fetch tweet replies"
             )
         }
 
@@ -468,3 +472,19 @@ class TwitterConnection(BaseConnection):
 
         logger.info("Tweet liked successfully")
         return response
+    
+    def get_tweet_replies(self, tweet_id: str, count: int = 10, **kwargs) -> List[dict]:
+        """Fetch replies to a specific tweet"""
+        logger.debug(f"Fetching replies for tweet {tweet_id}, count: {count}")
+        
+        params = {
+            "query": f"conversation_id:{tweet_id} is:reply",
+            "tweet.fields": "author_id,created_at,text",
+            "max_results": min(count, 100)
+        }
+        
+        response = self._make_request('get', 'tweets/search/recent', params=params)
+        replies = response.get("data", [])
+        
+        logger.info(f"Retrieved {len(replies)} replies")
+        return replies

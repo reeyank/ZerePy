@@ -20,6 +20,7 @@
     {
       "name": "twitter",
       "timeline_read_count": 10,
+      "own_tweet_replies_count":2,
       "tweet_interval": 5400
     },
     {

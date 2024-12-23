@@ -39,6 +39,7 @@ class ZerePyAgent:
 
             # TODO: These should probably live in the related task parameters
             self.tweet_interval = twitter_config.get("tweet_interval", 900)
+            self.own_tweet_replies_count = twitter_config.get("own_tweet_replies_count", 2)
 
             self.is_llm_set = False
             
@@ -47,7 +48,7 @@ class ZerePyAgent:
 
             # Extract loop tasks
             self.tasks = agent_dict.get("tasks", [])
-            self.task_weights = [task.get("weight", 1) for task in self.tasks]
+            self.task_weights = [task.get("weight", 0) for task in self.tasks]
 
             # Set up empty agent state
             self.state = {}
@@ -117,6 +118,7 @@ class ZerePyAgent:
 
         try:
             while True:
+                success = False 
                 try:
                     # REPLENISH INPUTS
                     # TODO: Add more inputs to complexify agent behavior
@@ -155,6 +157,7 @@ class ZerePyAgent:
                                     params=[tweet_text]
                                 )
                                 last_tweet_time = current_time
+                                success = True
                                 logger.info("\n✅ Tweet posted successfully!")
                         else:
                             logger.info("\n👀 Delaying post until tweet interval elapses...")
@@ -172,21 +175,25 @@ class ZerePyAgent:
                             # Check if it's our own tweet using username
                             is_own_tweet = tweet.get('author_username', '').lower() == self.username
                             if is_own_tweet:
+                                # pick one of the replies to reply to
+                                replies = self.connection_manager.perform_action(
+                                    connection_name="twitter",
+                                    action_name="get-tweet-replies",
+                                    params=[tweet.get('author_id')]
+                                )
+                                if replies:
+                                    self.state["timeline_tweets"].extend(replies[:self.own_tweet_replies_count])
                                 continue
 
                             logger.info(f"\n💬 GENERATING REPLY to: {tweet.get('text', '')[:50]}...")
 
                             # Customize prompt based on whether it's a self-reply
-                            base_prompt = (f"Generate a friendly, engaging reply to this tweet: {tweet.get('text')}. Keep it under 280 characters. Don't include any hashtags, links or emojis. "
+                            base_prompt = (f"Generate a friendly, engaging reply to this tweet: {tweet.get('text')}. Keep it under 280 characters. Don't include any usernames, hashtags, links or emojis. "
                                 f"The tweets should be pure commentary, do not shill any coins or projects apart from {self.name}. Do not repeat any of the"
                                 "tweets that were given as example. Avoid the words AI and crypto.")
 
-                            if is_own_tweet:
-                                system_prompt = self._construct_system_prompt() + "\n\nYou are replying to your own previous tweet. Stay in character while building on your earlier thought."
-                                reply_text = self.prompt_llm(prompt=base_prompt, system_prompt=system_prompt)
-                            else:
-                                system_prompt = self._construct_system_prompt()
-                                reply_text = self.prompt_llm(prompt=base_prompt, system_prompt=system_prompt)
+                            system_prompt = self._construct_system_prompt()
+                            reply_text = self.prompt_llm(prompt=base_prompt, system_prompt=system_prompt)
 
                             if reply_text:
                                 logger.info(f"\n🚀 Posting reply: '{reply_text}'")
@@ -195,6 +202,7 @@ class ZerePyAgent:
                                     action_name="reply-to-tweet",
                                     params=[tweet_id, reply_text]
                                 )
+                                success = True
                                 logger.info("✅ Reply posted successfully!")
 
                     elif action_name == "like-tweet":
@@ -212,12 +220,13 @@ class ZerePyAgent:
                                 action_name="like-tweet",
                                 params=[tweet_id]
                             )
+                            success = True
                             logger.info("✅ Tweet liked successfully!")
 
 
                     logger.info(f"\n⏳ Waiting {self.loop_delay} seconds before next loop...")
                     print_h_bar()
-                    time.sleep(self.loop_delay) 
+                    time.sleep(self.loop_delay if success else 60) 
 
                 except Exception as e:
                     logger.error(f"\n❌ Error in agent loop iteration: {e}")

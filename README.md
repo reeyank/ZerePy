@@ -116,7 +116,6 @@ Create a new JSON file in the `agents` directory following this structure:
     {
       "name": "twitter",
       "timeline_read_count": 10,
-      "self_reply_chance": 0.05,
       "tweet_interval": 900
     },
     {
