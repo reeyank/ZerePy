@@ -38,7 +38,6 @@ class ZerePyAgent:
                 raise KeyError("Twitter configuration is required")
 
             # TODO: These should probably live in the related task parameters
-            self.self_reply_chance = twitter_config.get("self_reply_chance", 0.05)
             self.tweet_interval = twitter_config.get("tweet_interval", 900)
 
             self.is_llm_set = False
@@ -172,9 +171,7 @@ class ZerePyAgent:
 
                             # Check if it's our own tweet using username
                             is_own_tweet = tweet.get('author_username', '').lower() == self.username
-                            if is_own_tweet and random.random() > self.self_reply_chance:
-                                logger.info("\n🤖 Skipping self-reply due to agent's choice.")
-                                print_h_bar()
+                            if is_own_tweet:
                                 continue
 
                             logger.info(f"\n💬 GENERATING REPLY to: {tweet.get('text', '')[:50]}...")
