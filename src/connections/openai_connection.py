@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Dict, Any, List
+from typing import Dict, Any
 from dotenv import load_dotenv, set_key
 from openai import OpenAI
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
@@ -155,9 +155,8 @@ class OpenAIConnection(BaseConnection):
     def check_model(self, model, **kwargs):
         try:
             client = self._get_client
-
             try:
-                response = client.models.retrieve(model=model)
+                client.models.retrieve(model=model)
                 # If we get here, the model exists
                 return True
             except Exception:
