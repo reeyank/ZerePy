@@ -67,6 +67,8 @@ class ZerePyAgent:
         # Load Twitter username for self-reply detection
         load_dotenv()
         self.username = os.getenv('TWITTER_USERNAME', '').lower()
+        if not self.username:
+                raise ValueError("Twitter username is required")
 
     def _construct_system_prompt(self) -> str:
         """Construct the system prompt from agent configuration"""
