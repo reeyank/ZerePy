@@ -94,8 +94,8 @@ class EternalAIConnection(BaseConnection):
 
         print("\n📝 To get your EternalAI API credentials:")
         print("1. Go to https://eternalai.org/api")
-        print("2. Create a new project or open an existing one.")
-        print("3. In your project settings, navigate to the API keys section and create a new API key")
+        print("2. Generate an API Key")
+        print("3. Use API url as https://api.eternalai.org/v1/")
 
         api_key = input("\nEnter your EternalAI API key: ")
         api_url = input("\nEnter your EternalAI API url: ")
