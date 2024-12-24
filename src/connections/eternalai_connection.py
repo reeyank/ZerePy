@@ -129,8 +129,8 @@ class EternalAIConnection(BaseConnection):
             if not api_key or not api_url:
                 return False
 
-            # client = OpenAI(api_key=api_key, base_url=api_url)
-            # client.models.list()
+            client = OpenAI(api_key=api_key, base_url=api_url)
+            client.models.list()
             return True
 
         except Exception as e:
@@ -164,7 +164,7 @@ class EternalAIConnection(BaseConnection):
         try:
             client = self._get_client
             try:
-                # client.models.retrieve(model=model)
+                client.models.retrieve(model=model)
                 # If we get here, the model exists
                 return True
             except Exception:
