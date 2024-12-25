@@ -24,6 +24,11 @@
       "tweet_interval": 5400
     },
     {
+      "name": "farcaster",
+      "timeline_read_count": 10,
+      "cast_interval": 60
+    },
+    {
       "name": "openai",
       "model": "gpt-3.5-turbo"
     },
