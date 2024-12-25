@@ -145,12 +145,10 @@ class FarcasterConnection(BaseConnection):
                 return True
 
         print("\n📝 To get your Farcaster (Warpcast) recovery phrase (for connection):")
-        print("1. Go to Warpcast client app")
-        print("2. Navigate to Settings page")
-        print("2a. Click your profile picture on the top left to open the menu")
-        print("2b. Click the gear icon on the top right of the menu")
+        print("1. Open the Warpcast mobile app")
+        print("2. Navigate to Settings page (click profile picture on top left, then the gear icon on top right)")
         print("3. Click 'Advanced' then 'Reveal recovery phrase'")
-        print("5. Copy your recovery phrase")
+        print("4. Copy your recovery phrase")
 
         recovery_phrase = input("\nEnter your Farcaster (Warpcast) recovery phrase: ")
 
