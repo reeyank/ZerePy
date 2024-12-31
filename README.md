@@ -136,5 +136,9 @@ Create a new JSON file in the `agents` directory following this structure:
 }
 ```
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=blorm-network/ZerePy&type=Date)](https://star-history.com/#blorm-network/ZerePy&Date)
+
 ---
 Made with ♥ @Blorm.xyz
