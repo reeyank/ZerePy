@@ -140,7 +140,7 @@ class ZerePyAgent:
                     current_hour = datetime.now().hour
                     
                     # Reset weights to original values and ensure no negative weights
-                    task_weights = [max(0.0, weight) for weight in self.task_weights.copy()]
+                    task_weights = [max(0.01, weight) for weight in self.task_weights.copy()]
 
                     # Reduce tweet frequency during night hours (1 AM - 5 AM)
                     if 1 <= current_hour <= 5:
