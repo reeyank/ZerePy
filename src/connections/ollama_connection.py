@@ -92,8 +92,6 @@ class OllamaConnection(BaseConnection):
                 logger.error(f"Ollama configuration check failed: {e}")
             return False
 
-    import json
-
     def generate_text(self, prompt: str, system_prompt: str, model: str = None, **kwargs) -> str:
         """Generate text using Ollama API with streaming support"""
         try:
@@ -126,9 +124,6 @@ class OllamaConnection(BaseConnection):
 
         except Exception as e:
             raise OllamaAPIError(f"Text generation failed: {e}")
-
-
-
     def perform_action(self, action_name: str, kwargs) -> Any:
         if action_name not in self.actions:
             raise KeyError(f"Unknown action: {action_name}")

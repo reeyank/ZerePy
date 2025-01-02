@@ -35,7 +35,7 @@ class ZerePyAgent:
             # Extract Twitter config
             twitter_config = next((config for config in agent_dict["config"] if config["name"] == "twitter"), None)
             if twitter_config:
-                # Set Twitter-specific variables only if the config exists
+                # TODO: These should probably live in the related task parameters
                 self.tweet_interval = twitter_config.get("tweet_interval", 900)
                 self.own_tweet_replies_count = twitter_config.get("own_tweet_replies_count", 2)
             else:
