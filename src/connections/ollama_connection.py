@@ -6,13 +6,16 @@ from src.connections.base_connection import BaseConnection, Action, ActionParame
 
 logger = logging.getLogger(__name__)
 
+
 class OllamaConnectionError(Exception):
     """Base exception for Ollama connection errors"""
     pass
 
+
 class OllamaAPIError(OllamaConnectionError):
     """Raised when Ollama API requests fail"""
     pass
+
 
 class OllamaConnection(BaseConnection):
     def __init__(self, config: Dict[str, Any]):
@@ -124,6 +127,7 @@ class OllamaConnection(BaseConnection):
 
         except Exception as e:
             raise OllamaAPIError(f"Text generation failed: {e}")
+
     def perform_action(self, action_name: str, kwargs) -> Any:
         if action_name not in self.actions:
             raise KeyError(f"Unknown action: {action_name}")
