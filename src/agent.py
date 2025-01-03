@@ -135,7 +135,6 @@ class ZerePyAgent:
                     # TODO: Add more inputs to complexify agent behavior
                     if "timeline_tweets" not in self.state or self.state["timeline_tweets"] is None or len(self.state["timeline_tweets"]) == 0:
                         if any("tweet" in task["name"] for task in self.tasks):
-                            print("Here")
                             logger.info("\n👀 READING TIMELINE")
                             self.state["timeline_tweets"] = self.connection_manager.perform_action(
                                 connection_name="twitter",
