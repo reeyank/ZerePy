@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 from typing import Dict, Any
@@ -164,7 +163,7 @@ class EternalAIConnection(BaseConnection):
             )
             if completion.choices is None:
                 raise EternalAIAPIError(f"Text generation failed: completion.choices is None")
-            print("response data:", json.dumps(completion, indent=4))
+            print("response data:", completion)
             return completion.choices[0].message.content
 
         except Exception as e:
