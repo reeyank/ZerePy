@@ -33,7 +33,7 @@ class ZerePyAgent:
             self.connection_manager = ConnectionManager(agent_dict["config"])
 
             # Extract Twitter config if Twitter tasks exist
-            has_twitter_tasks = any(task["name"].startswith("tweet") or task["name"].startswith("like-tweet") 
+            has_twitter_tasks = any("tweet" in task["name"] or task["name"].startswith("like-tweet") 
                                   for task in agent_dict.get("tasks", []))
             
             twitter_config = next((config for config in agent_dict["config"] if config["name"] == "twitter"), None)
@@ -71,7 +71,7 @@ class ZerePyAgent:
         self.model_provider = llm_providers[0]
 
         # Load Twitter username for self-reply detection if Twitter tasks exist
-        if any(task["name"].startswith("tweet") for task in self.tasks):
+        if any("tweet" in task["name"] for task in self.tasks):
             load_dotenv()
             self.username = os.getenv('TWITTER_USERNAME', '').lower()
             if not self.username:
@@ -132,7 +132,7 @@ class ZerePyAgent:
                     # REPLENISH INPUTS
                     # TODO: Add more inputs to complexify agent behavior
                     if "timeline_tweets" not in self.state or self.state["timeline_tweets"] is None or len(self.state["timeline_tweets"]) == 0:
-                        if any(task["name"].startswith("tweet") for task in self.tasks):
+                        if any("tweet" in task["name"] for task in self.tasks):
                             logger.info("\n👀 READING TIMELINE")
                             self.state["timeline_tweets"] = self.connection_manager.perform_action(
                                 connection_name="twitter",
