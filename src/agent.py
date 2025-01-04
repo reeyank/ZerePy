@@ -142,6 +142,15 @@ class ZerePyAgent:
                                 params=[]
                             )
 
+                    if "room_info" not in self.state or self.state["room_info"] is None:
+                        if any("echochambers" in task["name"] for task in self.tasks):
+                            logger.info("\n👀 READING ECHOCHAMBERS ROOM INFO")
+                            self.state["room_info"] = self.connection_manager.perform_action(
+                                connection_name="echochambers",
+                                action_name="get-room-info",
+                                params={}
+                            )
+
                     # CHOOSE AN ACTION
                     # TODO: Add agentic action selection
                     action = random.choices(self.tasks, weights=self.task_weights, k=1)[0]
