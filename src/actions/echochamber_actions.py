@@ -1,5 +1,6 @@
 import time,random
 from src.action_handler import register_action
+from src.prompts import REPLY_ECHOCHAMBER_PROMPT, POST_ECHOCHAMBER_PROMPT
 
 @register_action("post-echochambers")
 def post_echochambers(agent, **kwargs):
@@ -19,7 +20,11 @@ def post_echochambers(agent, **kwargs):
         previous_content = "\n".join([f"- {msg['content']}" for msg in previous_messages])
         agent.logger.info(f"Found {len(previous_messages)} messages in post history")
         
-        prompt = (f"Context:\n- Room Topic: {agent.state['room_info']['topic']}\n- Tags: {', '.join(agent.state['room_info']['tags'])}\n- Previous Messages:\n{previous_content}\n\nTask:\nCreate a concise, engaging message that:\n1. Aligns with the room's topic and tags\n2. Builds upon Previous Messages without repeating them, or repeating greetings, introductions, or sentences.\n3. Offers fresh insights or perspectives\n4. Maintains a natural, conversational tone\n5. Keeps length between 2-4 sentences\n\nGuidelines:\n- Be specific and relevant\n- Add value to the ongoing discussion\n- Avoid generic statements\n- Use a friendly but professional tone\n- Include a question or discussion point when appropriate\n\nThe message should feel organic and contribute meaningfully to the conversation.")
+        prompt  = POST_ECHOCHAMBER_PROMPT.format(
+            room_topic=agent.state['room_info']['topic'],
+            tags=", ".join(agent.state['room_info']['tags']),
+            previous_content=previous_content
+        )
         message = agent.prompt_llm(prompt)
         
         if message:
@@ -75,7 +80,13 @@ def reply_echochambers(agent, **kwargs):
             
             refer_username = random.random() < 0.7
             username_prompt = f"Refer the sender by their @{sender_username}" if refer_username else "Respond without directly referring to the sender"
-            prompt = (f"Context:\n- Current Message: \"{content}\"\n- Sender Username: @{sender_username}\n- Room Topic: {agent.state['room_info']['topic']}\n- Tags: {', '.join(agent.state['room_info']['tags'])}\n\nTask:\nCraft a reply that:\n1. Addresses the message\n2. Aligns with topic/tags\n3. Engages participants\n4. Adds value\n\nGuidelines:\n- Reference message points\n- Offer new perspectives\n- Be friendly and respectful\n- Keep it 2-3 sentences\n- {username_prompt}\n\nEnhance conversation and encourage engagement\n\nThe reply should feel organic and contribute meaningfully to the conversation.")
+            prompt = REPLY_ECHOCHAMBER_PROMPT.format(
+                content=content,
+                sender_username=sender_username,
+                room_topic=agent.state['room_info']['topic'],
+                tags=", ".join(agent.state['room_info']['tags']),
+                username_prompt=username_prompt
+            )
             reply = agent.prompt_llm(prompt)
             
             if reply:

@@ -1,6 +1,7 @@
 import time 
 from src.action_handler import register_action
 from src.helpers import print_h_bar
+from src.prompts import POST_TWEET_PROMPT, REPLY_TWEET_PROMPT
 
 
 @register_action("post-tweet")
@@ -13,9 +14,8 @@ def post_tweet(agent, **kwargs):
     if current_time - last_tweet_time >= agent.tweet_interval:
         agent.logger.info("\n📝 GENERATING NEW TWEET")
         print_h_bar()
-        prompt = ("Generate an engaging tweet. Don't include any hashtags, links or emojis. Keep it under 280 characters."
-                f"The tweets should be pure commentary, do not shill any coins or projects apart from {agent.name}. Do not repeat any of the"
-                "tweets that were given as example. Avoid the words AI and crypto.")
+
+        prompt = POST_TWEET_PROMPT.format(agent_name = agent.name)
         tweet_text = agent.prompt_llm(prompt)
 
         if tweet_text:
@@ -44,7 +44,7 @@ def reply_to_tweet(agent, **kwargs):
 
         agent.logger.info(f"\n💬 GENERATING REPLY to: {tweet.get('text', '')[:50]}...")
 
-        base_prompt = (f"Generate a friendly, engaging reply to this tweet: {tweet.get('text')}. Keep it under 280 characters. Don't include any usernames, hashtags, links or emojis. ")
+        base_prompt = REPLY_TWEET_PROMPT.format(tweet_text =tweet.get('text') )
         system_prompt = agent._construct_system_prompt()
         reply_text = agent.prompt_llm(prompt=base_prompt, system_prompt=system_prompt)
 
