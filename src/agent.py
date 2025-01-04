@@ -36,7 +36,6 @@ class ZerePyAgent:
             self.connection_manager = ConnectionManager(agent_dict["config"])
 
             # Extract Twitter config if Twitter tasks exist
-            
             has_twitter_tasks = any("tweet" in task["name"] or task["name"].startswith("like-tweet") 
                                   for task in agent_dict.get("tasks", []))
             
