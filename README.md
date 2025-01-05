@@ -107,6 +107,30 @@ poetry run python main.py
    start
    ```
 
+## Platform Features
+
+### Twitter/X
+
+- Post tweets from prompts
+- Read timeline with configurable count
+- Reply to tweets in timeline
+- Like tweets in timeline
+
+### Farcaster
+
+- Post casts
+- Reply to casts
+- Like and requote casts
+- Read timeline
+- Get cast replies
+
+### Echochambers
+
+- Post new messages to rooms
+- Reply to messages based on room context
+- Read room history
+- Get room information and topics
+
 ## Create your own agent
 
 The secret to having a good output from the agent is to provide as much detail as possible in the configuration file. Craft a story and a context for the agent, and pick very good examples of tweets to include.
@@ -167,30 +191,6 @@ Use `help` in the CLI to see all available commands. Key commands include:
 - `list-actions`: Show available actions for a connection
 - `configure-connection`: Set up a new connection
 - `chat`: Start interactive chat with agent
-
-## Platform Features
-
-### Twitter/X
-
-- Post tweets from prompts
-- Read timeline with configurable count
-- Reply to tweets in timeline
-- Like tweets in timeline
-
-### Farcaster
-
-- Post casts
-- Reply to casts
-- Like and requote casts
-- Read timeline
-- Get cast replies
-
-### Echochambers
-
-- Post new messages to rooms
-- Reply to messages based on room context
-- Read room history
-- Get room information and topics
 
 ## Star History
 
