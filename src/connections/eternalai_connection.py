@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from typing import Dict, Any
@@ -138,6 +139,16 @@ class EternalAIConnection(BaseConnection):
                 logger.debug(f"Configuration check failed: {e}")
             return False
 
+    def serialize_chat_completion(self, obj):
+        if isinstance(obj, dict):
+            return {key: self.serialize_chat_completion(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [self.serialize_chat_completion(item) for item in obj]
+        elif hasattr(obj, "__dict__"):
+            return self.serialize_chat_completion(obj.__dict__)
+        else:
+            return obj
+
     def generate_text(self, prompt: str, system_prompt: str, model: str = None, chain_id: str = None, **kwargs) -> str:
         """Generate text using EternalAI models"""
         try:
@@ -146,12 +157,12 @@ class EternalAIConnection(BaseConnection):
             # Use configured model if none provided
             if not model:
                 model = self.config["model"]
-            print("model", model)
+            logger.info(f"model {model}")
             if not chain_id:
                 chain_id = self.config["chain_id"]
             if not chain_id or chain_id == "":
                 chain_id = "45762"
-            print("chain_id", chain_id)
+            logger.info(f"chain_id {chain_id}")
 
             completion = client.chat.completions.create(
                 model=model,
@@ -163,7 +174,10 @@ class EternalAIConnection(BaseConnection):
             )
             if completion.choices is None:
                 raise EternalAIAPIError(f"Text generation failed: completion.choices is None")
-            print("response data:", completion)
+            try:
+                logger.info(f"response data: {json.dumps(self.serialize_chat_completion(completion), indent=4)}")
+            finally:
+                logger.info(f"response data: {completion}", )
             return completion.choices[0].message.content
 
         except Exception as e:
