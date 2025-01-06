@@ -3,6 +3,8 @@ import os
 from typing import Dict, Any, List, Optional
 from dotenv import set_key, load_dotenv
 import math
+import aiohttp
+import requests
 
 # solana
 from solana.rpc.api import Client
@@ -18,7 +20,7 @@ from solders.message import MessageV0 # type: ignore
 
 # src
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
-from src.types import TransferResult
+from src.types import TransferResult, JupiterTokenData, NetworkPerformanceMetrics
 from src.constants import LAMPORTS_PER_SOL
 
 # spl
@@ -185,7 +187,7 @@ class SolanaConnection(BaseConnection):
                 description="Launch a Pump & Fun token"
             )
         }
-
+#todo w
     def configure(self) -> bool:
         """Stub configuration"""
         return True
@@ -230,54 +232,121 @@ class SolanaConnection(BaseConnection):
             logger.error(f"Transfer failed: {error}")
             raise RuntimeError(f"Transfer operation failed: {error}") from error
             
-
+#todo w
     def trade(self, output_mint: str, input_amount: float, 
              input_mint: Optional[str] = None, slippage_bps: int = 100) -> bool:
         logger.info(f"STUB: Swap {input_amount} for {output_mint}")
         return True
 
     def get_balance(self, token_address: Optional[str] = None) -> float:
-        return 100.0
+        connection = self._get_connection()
+        wallet = self._get_wallet()
+        try:
+            if not token_address:
+                response = connection.get_balance(
+                    wallet.pubkey(),
+                    commitment=Confirmed
+                )
+                return response.value / LAMPORTS_PER_SOL
 
+            response = connection.get_token_account_balance(
+                token_address,
+                commitment=Confirmed
+            )
+
+            if response.value is None:
+                return None
+
+            return float(response.value.ui_amount)
+
+        except Exception as error:
+            raise Exception(f"Failed to get balance: {str(error)}") from error
+
+#todo w
     def stake(self, amount: float) -> bool:
         logger.info(f"STUB: Stake {amount} SOL")
         return True
 
+#todo w
     def lend_assets(self, amount: float) -> bool:
         logger.info(f"STUB: Lend {amount}")
         return True
 
+#todo w
     def request_faucet(self) -> bool:
         logger.info("STUB: Requesting faucet funds")
         return True
-
+#todo w
     def deploy_token(self, decimals: int = 9) -> str:
         return "STUB_TOKEN_ADDRESS"
-
     def fetch_price(self, token_id: str) -> float:
-        return 1.23
+        url = f"https://api.jup.ag/price/v2?ids={token_id}"
 
+        try:
+            with requests.get(url) as response:
+                response.raise_for_status()
+                data = response.json()
+                price = data.get("data", {}).get(token_id, {}).get("price")
+
+                if not price:
+                    raise Exception("Price data not available for the given token.")
+
+                return str(price)
+        except Exception as e:
+            raise Exception(f"Price fetch failed: {str(e)}")
+        return 1.23
+#todo: test
     def get_tps(self) -> int:
-        return 5000
+        return SolanaPerformanceTracker.fetch_current_tps(self)
 
     def get_token_by_ticker(self, ticker: str) -> Dict[str, Any]:
-        return {
-            "name": "Stub Token",
-            "ticker": ticker,
-            "mint": "STUB_MINT_ADDRESS",
-            "decimals": 9,
-            "price": 1.23,
-        }
+        try:
+            response = requests.get(f"https://api.dexscreener.com/latest/dex/search?q={ticker}")
+            response.raise_for_status()
+
+            data = response.json()
+            if not data.get("pairs"):
+                return None
+
+            solana_pairs = [
+                pair for pair in data["pairs"] if pair.get("chainId") == "solana"
+            ]
+            solana_pairs.sort(key=lambda x: x.get("fdv", 0), reverse=True)
+
+            solana_pairs = [
+                pair
+                for pair in solana_pairs
+                if pair.get("baseToken", {}).get("symbol", "").lower() == ticker.lower()
+            ]
+
+            if solana_pairs:
+                return solana_pairs[0].get("baseToken", {}).get("address")
+            return None
+        except Exception as error:
+            logger.error(f"Error fetching token address from DexScreener: {str(error)}", exc_info=True)
+            return None
 
     def get_token_by_address(self, mint: str) -> Dict[str, Any]:
-        return {
-            "name": "Stub Token",
-            "ticker": "STUB",
-            "mint": mint,
-            "decimals": 9,
-            "price": 1.23,
-        }
+        try:
+            if not mint:
+                raise ValueError("Mint address is required")
 
+            response = requests.get("https://tokens.jup.ag/tokens?tags=verified", headers={"Content-Type": "application/json"})
+            response.raise_for_status()
+
+            data = response.json()
+            for token in data:
+                if token.get("address") == str(mint):
+                    return JupiterTokenData(
+                        address=token.get("address"),
+                        symbol=token.get("symbol"),
+                        name=token.get("name"),
+                    )
+            return None
+        except Exception as error:
+            raise Exception(f"Error fetching token data: {str(error)}")
+
+#todo w
     def launch_pump_token(self, token_name: str, token_ticker: str, 
                          description: str, image_url: str, 
                          options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -302,6 +371,7 @@ class SolanaConnection(BaseConnection):
         return method(**kwargs)
     
 class SolanaTransferHelper:
+
     """Helper class for Solana token and SOL transfers."""
 
     @staticmethod
@@ -417,3 +487,124 @@ class SolanaTransferHelper:
     def confirm_transaction(agent: SolanaConnection, signature: str) -> None:
         """Wait for transaction confirmation."""
         agent._get_connection().confirm_transaction(signature, commitment=Confirmed)
+
+def fetch_performance_samples(
+    agent: SolanaConnection, sample_count: int = 1
+) -> List[NetworkPerformanceMetrics]:
+    """
+    Fetch detailed performance metrics for a specified number of samples.
+
+    Args:
+        agent: An instance of SolanaAgent providing the RPC connection.
+        sample_count: Number of performance samples to retrieve (default: 1).
+
+    Returns:
+        A list of NetworkPerformanceMetrics objects.
+
+    Raises:
+        ValueError: If performance samples are unavailable or invalid.
+    """
+    connection = agent._get_connection()
+    try:
+        performance_samples = connection.get_recent_performance_samples(sample_count)
+
+        if not performance_samples:
+            raise ValueError("No performance samples available.")
+
+        return [
+            NetworkPerformanceMetrics(
+                transactions_per_second=sample["num_transactions"]
+                / sample["sample_period_secs"],
+                total_transactions=sample["num_transactions"],
+                sampling_period_seconds=sample["sample_period_secs"],
+                current_slot=sample["slot"],
+            )
+            for sample in performance_samples
+        ]
+
+    except Exception as error:
+        raise ValueError(f"Failed to fetch performance samples: {str(error)}") from error
+    
+class SolanaPerformanceTracker:
+    """
+    A utility class for tracking and analyzing Solana network performance metrics.
+    """
+
+    def __init__(self, agent: SolanaConnection):
+        self.agent = agent
+        self.metrics_history: List[NetworkPerformanceMetrics] = []
+
+    def record_latest_metrics(self) -> NetworkPerformanceMetrics:
+        """
+        Fetch the latest performance metrics and add them to the history.
+
+        Returns:
+            The most recent NetworkPerformanceMetrics object.
+        """
+        latest_metrics = fetch_performance_samples(self.agent, 1)
+        self.metrics_history.append(latest_metrics[0])
+        return latest_metrics[0]
+
+    def calculate_average_tps(self) -> Optional[float]:
+        """
+        Calculate the average TPS from the recorded performance metrics.
+
+        Returns:
+            The average TPS as a float, or None if no metrics are recorded.
+        """
+        if not self.metrics_history:
+            return None
+        return sum(
+            metric.transactions_per_second for metric in self.metrics_history
+        ) / len(self.metrics_history)
+
+    def find_maximum_tps(self) -> Optional[float]:
+        """
+        Find the maximum TPS from the recorded performance metrics.
+
+        Returns:
+            The maximum TPS as a float, or None if no metrics are recorded.
+        """
+        if not self.metrics_history:
+            return None
+        return max(metric.transactions_per_second for metric in self.metrics_history)
+
+    def reset_metrics_history(self) -> None:
+        """Clear all recorded performance metrics."""
+        self.metrics_history.clear()
+    
+    def fetch_current_tps(agent: SolanaConnection) -> float:
+        """
+        Fetch the current Transactions Per Second (TPS) on the Solana network.
+
+        Args:
+            agent: An instance of SolanaAgent providing the RPC connection.
+
+        Returns:
+            Current TPS as a float.
+
+        Raises:
+            ValueError: If performance samples are unavailable or invalid.
+        """
+        connection = agent._get_connection()
+        try:
+            response =  connection.get_recent_performance_samples(1)
+
+            performance_samples = response.value
+            # logger.info("Performance Samples:", performance_samples)
+
+            if not performance_samples:
+                raise ValueError("No performance samples available.")
+
+            sample = performance_samples[0]
+
+            if not all(
+                hasattr(sample, attr)
+                for attr in ["num_transactions", "sample_period_secs"]
+            ) or sample.num_transactions <= 0 or sample.sample_period_secs <= 0:
+                raise ValueError("Invalid performance sample data.")
+
+            return sample.num_transactions / sample.sample_period_secs
+
+        except Exception as error:
+            raise ValueError(f"Failed to fetch TPS: {str(error)}") from error
