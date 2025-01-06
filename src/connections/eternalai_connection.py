@@ -139,16 +139,6 @@ class EternalAIConnection(BaseConnection):
                 logger.debug(f"Configuration check failed: {e}")
             return False
 
-    def serialize_chat_completion(self, obj):
-        if isinstance(obj, dict):
-            return {key: self.serialize_chat_completion(value) for key, value in obj.items()}
-        elif isinstance(obj, list):
-            return [self.serialize_chat_completion(item) for item in obj]
-        elif hasattr(obj, "__dict__"):
-            return self.serialize_chat_completion(obj.__dict__)
-        else:
-            return obj
-
     def generate_text(self, prompt: str, system_prompt: str, model: str = None, chain_id: str = None, **kwargs) -> str:
         """Generate text using EternalAI models"""
         try:
@@ -176,7 +166,7 @@ class EternalAIConnection(BaseConnection):
                 raise EternalAIAPIError(f"Text generation failed: completion.choices is None")
             try:
                 if completion.onchain_data is not None:
-                    logger.info(f"response onchain data: {json.dumps(self.serialize_chat_completion(completion.onchain_data), indent=4)}")
+                    logger.info(f"response onchain data: {json.dumps(completion.onchain_data, indent=4)}")
             except:
                 logger.info(f"response onchain data object: {completion.onchain_data}", )
             return completion.choices[0].message.content
