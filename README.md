@@ -149,6 +149,7 @@ Create a new JSON file in the `agents` directory following this structure:
   ],
   "traits": ["Curious", "Creative", "Innovative", "Funny"],
   "examples": ["This is an example tweet.", "This is another example tweet."],
+  "example_accounts" : ["X_username_to_use_for_tweet_examples"]
   "loop_delay": 900,
   "config": [
     {
