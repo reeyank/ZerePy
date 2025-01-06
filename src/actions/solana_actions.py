@@ -92,6 +92,22 @@ def sol_lend(agent, **kwargs):
         agent.logger.error(f"❌ Lending failed: {str(e)}")
         return False
 
+@register_action("sol-request-funds")
+def request_faucet_funds(agent, **kwargs):
+    """Request faucet funds for testing"""
+    agent.logger.info("\n🚰 REQUESTING FAUCET FUNDS")
+    try:
+        result = agent.connection_manager.perform_action(
+            connection_name="solana",
+            action_name="request-faucet",
+            params=[]
+        )
+        agent.logger.info("✅ Faucet request completed!")
+        return result
+    except Exception as e:
+        agent.logger.error(f"❌ Faucet request failed: {str(e)}")
+        return False
+
 @register_action("sol-deploy-token")
 def sol_deploy_token(agent, **kwargs):
     """Deploy a new token"""
@@ -139,3 +155,57 @@ def sol_get_tps(agent, **kwargs):
     except Exception as e:
         agent.logger.error(f"❌ TPS fetch failed: {str(e)}")
         return None
+
+@register_action("sol-get-token-by-ticker")
+def get_token_data_by_ticker(agent, **kwargs):
+    """Get token data by ticker"""
+    agent.logger.info("\n🔍 FETCHING TOKEN DATA BY TICKER")
+    try:
+        result = agent.connection_manager.perform_action(
+            connection_name="solana",
+            action_name="get-token-by-ticker",
+            params=[kwargs.get('ticker')]
+        )
+        agent.logger.info("✅ Token data retrieved!")
+        return result
+    except Exception as e:
+        agent.logger.error(f"❌ Token data fetch failed: {str(e)}")
+        return None
+
+@register_action("sol-get-token-by-address")
+def get_token_data_by_address(agent, **kwargs):
+    """Get token data by address"""
+    agent.logger.info("\n🔍 FETCHING TOKEN DATA BY ADDRESS")
+    try:
+        result = agent.connection_manager.perform_action(
+            connection_name="solana",
+            action_name="get-token-by-address",
+            params=[kwargs.get('mint')]
+        )
+        agent.logger.info("✅ Token data retrieved!")
+        return result
+    except Exception as e:
+        agent.logger.error(f"❌ Token data fetch failed: {str(e)}")
+        return None
+
+@register_action("sol-launch-pump-token")
+def launch_pump_fun_token(agent, **kwargs):
+    """Launch a Pump & Fun token"""
+    agent.logger.info("\n🚀 LAUNCHING PUMP & FUN TOKEN")
+    try:
+        result = agent.connection_manager.perform_action(
+            connection_name="solana",
+            action_name="launch-pump-token",
+            params=[
+                kwargs.get('token_name'),
+                kwargs.get('token_ticker'),
+                kwargs.get('description'),
+                kwargs.get('image_url'),
+                kwargs.get('options', {})
+            ]
+        )
+        agent.logger.info("✅ Token launched successfully!")
+        return result
+    except Exception as e:
+        agent.logger.error(f"❌ Token launch failed: {str(e)}")
+        return False

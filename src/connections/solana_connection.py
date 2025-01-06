@@ -64,6 +64,11 @@ class SolanaConnection(BaseConnection):
                 ],
                 description="Lend assets"
             ),
+            "request-faucet": Action(
+                name="request-faucet",
+                parameters=[],
+                description="Request funds from faucet for testing"
+            ),
             "deploy-token": Action(
                 name="deploy-token",
                 parameters=[
@@ -82,6 +87,31 @@ class SolanaConnection(BaseConnection):
                 name="get-tps",
                 parameters=[],
                 description="Get current Solana TPS"
+            ),
+            "get-token-by-ticker": Action(
+                name="get-token-by-ticker",
+                parameters=[
+                    ActionParameter("ticker", True, str, "Token ticker symbol")
+                ],
+                description="Get token data by ticker symbol"
+            ),
+            "get-token-by-address": Action(
+                name="get-token-by-address",
+                parameters=[
+                    ActionParameter("mint", True, str, "Token mint address")
+                ],
+                description="Get token data by mint address"
+            ),
+            "launch-pump-token": Action(
+                name="launch-pump-token",
+                parameters=[
+                    ActionParameter("token_name", True, str, "Name of the token"),
+                    ActionParameter("token_ticker", True, str, "Token ticker symbol"),
+                    ActionParameter("description", True, str, "Token description"),
+                    ActionParameter("image_url", True, str, "Token image URL"),
+                    ActionParameter("options", False, dict, "Additional token options")
+                ],
+                description="Launch a Pump & Fun token"
             )
         }
 
@@ -113,6 +143,10 @@ class SolanaConnection(BaseConnection):
         logger.info(f"STUB: Lend {amount}")
         return True
 
+    def request_faucet(self) -> bool:
+        logger.info("STUB: Requesting faucet funds")
+        return True
+
     def deploy_token(self, decimals: int = 9) -> str:
         return "STUB_TOKEN_ADDRESS"
 
@@ -122,6 +156,33 @@ class SolanaConnection(BaseConnection):
     def get_tps(self) -> int:
         return 5000
 
+    def get_token_by_ticker(self, ticker: str) -> Dict[str, Any]:
+        return {
+            "name": "Stub Token",
+            "ticker": ticker,
+            "mint": "STUB_MINT_ADDRESS",
+            "decimals": 9,
+            "price": 1.23,
+        }
+
+    def get_token_by_address(self, mint: str) -> Dict[str, Any]:
+        return {
+            "name": "Stub Token",
+            "ticker": "STUB",
+            "mint": mint,
+            "decimals": 9,
+            "price": 1.23,
+        }
+
+    def launch_pump_token(self, token_name: str, token_ticker: str, 
+                         description: str, image_url: str, 
+                         options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        return {
+            "name": token_name,
+            "ticker": token_ticker,
+            "mint": "STUB_MINT_ADDRESS",
+            "decimals": 9,
+        }
     def perform_action(self, action_name: str, kwargs) -> Any:
         """Execute a Solana action with validation"""
         if action_name not in self.actions:
