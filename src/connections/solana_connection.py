@@ -1,3 +1,4 @@
+import base64
 import logging
 import os
 from typing import Dict, Any, List, Optional
@@ -21,7 +22,7 @@ from solders.message import MessageV0 # type: ignore
 # src
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
 from src.types import TransferResult, JupiterTokenData, NetworkPerformanceMetrics
-from src.constants import LAMPORTS_PER_SOL
+from src.constants import LAMPORTS_PER_SOL, DEFAULT_OPTIONS, JUP_API, TOKENS
 
 # spl
 from spl.token.client import Token
@@ -232,10 +233,11 @@ class SolanaConnection(BaseConnection):
             logger.error(f"Transfer failed: {error}")
             raise RuntimeError(f"Transfer operation failed: {error}") from error
             
-#todo w
+#todo: test
     def trade(self, output_mint: str, input_amount: float, 
-             input_mint: Optional[str] = None, slippage_bps: int = 100) -> bool:
+             input_mint: Optional[str] = TOKENS['SOL'], slippage_bps: int = 100) -> bool:
         logger.info(f"STUB: Swap {input_amount} for {output_mint}")
+        TradeManager.trade(self,output_mint,input_amount,input_mint,slippage_bps)
         return True
 
     def get_balance(self, token_address: Optional[str] = None) -> float:
@@ -608,3 +610,153 @@ class SolanaPerformanceTracker:
 
         except Exception as error:
             raise ValueError(f"Failed to fetch TPS: {str(error)}") from error
+
+class TradeManager:
+    @staticmethod
+    def trade(
+    agent: SolanaConnection,
+    output_mint: Pubkey,
+    input_amount: float,
+    input_mint: Pubkey = TOKENS["SOL"],
+    slippage_bps: int = DEFAULT_OPTIONS["SLIPPAGE_BPS"],
+) -> str:
+        """
+        Swap tokens using Jupiter Exchange.
+
+        Args:
+            agent (SolanaAgentKit): The Solana agent instance.
+            output_mint (Pubkey): Target token mint address.
+            input_amount (float): Amount to swap (in token decimals).
+            input_mint (Pubkey): Source token mint address (default: USDC).
+            slippage_bps (int): Slippage tolerance in basis points (default: 300 = 3%).
+
+        Returns:
+            str: Transaction signature.
+
+        Raises:
+            Exception: If the swap fails.
+        """
+        connection = agent._get_connection()
+        try:
+            quote_url = (
+                f"{JUP_API}/quote?"
+                f"inputMint={input_mint}"
+                f"&outputMint={output_mint}"
+                f"&amount={int(input_amount * LAMPORTS_PER_SOL)}"
+                f"&slippageBps={slippage_bps}"
+                f"&onlyDirectRoutes=true"
+                f"&maxAccounts=20"
+            )
+            with requests.get(quote_url) as quote_response:
+                quote_response.raise_for_status()
+                quote_data = quote_response.json()
+
+                with requests.post(
+                    f"{JUP_API}/swap",
+                    json={
+                        "quoteResponse": quote_data,
+                        "userPublicKey": str(agent.wallet_address),
+                        "wrapAndUnwrapSol": True,
+                        "dynamicComputeUnitLimit": True,
+                        "prioritizationFeeLamports": "auto",
+                    },
+                ) as swap_response:
+                    swap_response.raise_for_status()
+                    swap_data = swap_response.json()
+
+            swap_transaction_buf = base64.b64decode(swap_data["swapTransaction"])
+            transaction = VersionedTransaction.deserialize(swap_transaction_buf)
+
+            latest_blockhash = connection.get_latest_blockhash()
+            transaction.message.recent_blockhash = latest_blockhash.value.blockhash
+
+            transaction.sign([agent.wallet])
+
+            signature = connection.send_raw_transaction(
+                transaction.serialize(), opts={"skip_preflight": False, "max_retries": 3}
+            )
+
+            connection.confirm_transaction(
+                signature,
+                commitment=Confirmed,
+                last_valid_block_height=latest_blockhash.value.last_valid_block_height,
+            )
+
+            return str(signature)
+
+        except Exception as e:
+            raise Exception(f"Swap failed: {str(e)}")
+        
+""" class StakeManager:
+    @staticmethod
+    def stake_with_jup(agent: SolanaConnection, amount: float) -> str:
+        
+        connection = agent._get_connection()
+        wallet = agent._get_wallet()
+        try:
+
+            url = f"https://worker.jup.ag/blinks/swap/So11111111111111111111111111111111111111112/jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v/{amount}"
+            payload = {"account": str(wallet.pubkey())}
+
+            with requests.post(url, json=payload) as res:
+                res.raise_for_status()
+
+                data = res.json()
+
+            
+            txn = VersionedTransaction.from_bytes(base64.b64decode(data["transaction"]))
+
+
+            latest_blockhash = connection.get_latest_blockhash()
+
+            signature = connection.send_raw_transaction(
+                base64.b64decode(data["transaction"]),
+            )
+
+            connection.confirm_transaction(
+                signature,
+                commitment=Confirmed,
+                last_valid_block_height=latest_blockhash.value.last_valid_block_height,
+            )
+
+            return str(signature)
+
+        except Exception as e:
+            raise Exception(f"jupSOL staking failed: {str(e)}") """
+
+""" class AssetLender:
+    @staticmethod
+    async def lend_asset(agent: SolanaAgentKit, amount: float) -> str:
+       
+        try:
+            url = f"https://blink.lulo.fi/actions?amount={amount}&symbol=USDC"
+            headers = {"Content-Type": "application/json"}
+            payload = json.dumps({"account": str(agent.wallet.pubkey())})
+
+            session = aiohttp.ClientSession()
+
+            async with session.post(url, headers=headers, data=payload) as response:
+                if response.status != 200:
+                    raise Exception(f"Lulo API Error: {response.status}")
+                data = await response.json()
+
+            transaction_bytes = base64.b64decode(data["transaction"])
+            lulo_txn = VersionedTransaction.deserialize(transaction_bytes)
+
+            latest_blockhash = await agent.connection.get_latest_blockhash()
+            lulo_txn.message.recent_blockhash = latest_blockhash.value.blockhash
+
+            lulo_txn.sign([agent.wallet])
+
+            signature = await agent.connection.send_transaction(lulo_txn, opts={"preflight_commitment": Confirmed})
+            
+            await agent.connection.confirm_transaction(
+                tx_sig=signature,
+                last_valid_block_height=latest_blockhash.value.last_valid_block_height,
+                commitment=Confirmed,
+            )
+
+            return str(signature)
+
+        except Exception as e:
+            raise Exception(f"Lending failed: {str(e)}") """
