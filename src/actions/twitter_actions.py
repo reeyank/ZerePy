@@ -68,6 +68,17 @@ def like_tweet(agent, **kwargs):
         tweet_id = tweet.get('id')
         if not tweet_id:
             return False
+        
+        is_own_tweet = tweet.get('author_username', '').lower() == agent.username
+        if is_own_tweet:
+            replies = agent.connection_manager.perform_action(
+                connection_name="twitter",
+                action_name="get-tweet-replies",
+                params=[tweet.get('author_id')]
+            )
+            if replies:
+                agent.state["timeline_tweets"].extend(replies[:agent.own_tweet_replies_count])
+            return True 
 
         agent.logger.info(f"\n👍 LIKING TWEET: {tweet.get('text', '')[:50]}...")
 
