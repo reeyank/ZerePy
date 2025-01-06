@@ -175,9 +175,10 @@ class EternalAIConnection(BaseConnection):
             if completion.choices is None:
                 raise EternalAIAPIError(f"Text generation failed: completion.choices is None")
             try:
-                logger.info(f"response data: {json.dumps(self.serialize_chat_completion(completion), indent=4)}")
-            finally:
-                logger.info(f"response data: {completion}", )
+                if completion.onchain_data is not None:
+                    logger.info(f"response onchain data: {json.dumps(self.serialize_chat_completion(completion.onchain_data), indent=4)}")
+            except:
+                logger.info(f"response onchain data object: {completion.onchain_data}", )
             return completion.choices[0].message.content
 
         except Exception as e:
