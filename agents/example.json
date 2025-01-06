@@ -35,6 +35,10 @@
     {
       "name": "anthropic",
       "model": "claude-3-5-sonnet-20241022"
+    },
+    {
+      "name": "solana",
+      "network": "devnet"
     }
   ],
   "tasks": [
