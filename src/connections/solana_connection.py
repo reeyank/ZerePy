@@ -1,11 +1,40 @@
 import logging
+import os
 from typing import Dict, Any, List, Optional
+from dotenv import set_key, load_dotenv
+import math
+
+# solana
+from solana.rpc.api import Client
+from solana.rpc.commitment import Confirmed
+
+# solders
+from solders.keypair import Keypair  # type: ignore
+from solders.pubkey import Pubkey  # type: ignore
+from solders.system_program import TransferParams, transfer
+from solders.transaction import VersionedTransaction # type: ignore
+from solders.hash import Hash  # type: ignore
+from solders.message import MessageV0 # type: ignore
+
+# src
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
+from src.types import TransferResult
+from src.constants import LAMPORTS_PER_SOL
+
+# spl
+from spl.token.client import Token
+from spl.token.constants import TOKEN_PROGRAM_ID
+from spl.token.instructions import (get_associated_token_address,
+                                    transfer_checked)
+
 
 logger = logging.getLogger("connections.solana_connection")
 
 class SolanaConnectionError(Exception):
     """Base exception for Solana connection errors"""
+    pass
+class SolanaConfigurationError(SolanaConnectionError):
+    """Raised when there are configuration/credential issues"""
     pass
 
 class SolanaConnection(BaseConnection):
@@ -16,9 +45,51 @@ class SolanaConnection(BaseConnection):
     @property
     def is_llm_provider(self) -> bool:
         return False
+    def _get_connection(self) -> Client:
+        conn = Client(self.config['rpc'])
+        if not conn.is_connected():
+            raise SolanaConnectionError("rpc invalid connection")
+        return conn
+    def _get_wallet(self):
+        creds = self._get_credentials()
+        return Keypair.from_base58_string(creds['SOLANA_PRIVATE_KEY'])
+    def _get_credentials(self) -> Dict[str, str]:
+        """Get Solana credentials from environment with validation"""
+        logger.debug("Retrieving Solana Credentials")
+        load_dotenv()
+        required_vars = {
+            "SOLANA_PRIVATE_KEY": "solana wallet private key"
+        }
+        credentials = {}
+        missing = []
+
+        for env_var, description in required_vars.items():
+            value = os.getenv(env_var)
+            if not value:
+                missing.append(description)
+            credentials[env_var] = value
+
+        if missing:
+            error_msg = f"Missing Solana credentials: {', '.join(missing)}"
+            raise SolanaConfigurationError(error_msg)
+        
+
+        
+        
+        Keypair.from_base58_string(credentials['SOLANA_PRIVATE_KEY'])
+        logger.debug("All required credentials found")
+        return credentials
 
     def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Validate Solana configuration from JSON"""
+        required_fields = ["rpc"]
+        missing_fields = [field for field in required_fields if field not in config]
+        if missing_fields:
+            raise ValueError(f"Missing required configuration fields: {', '.join(missing_fields)}")
+            
+        if not isinstance(config["rpc"], str):
+            raise ValueError("rpc must be a positive integer")
+            
         return config  # For stub, accept any config
 
     def register_actions(self) -> None:
@@ -119,13 +190,46 @@ class SolanaConnection(BaseConnection):
         """Stub configuration"""
         return True
 
-    def is_configured(self, verbose: bool = False) -> bool:
+    def is_configured(self, verbose: bool = True) -> bool:
         """Stub configuration check"""
+        try:
+
+            credentials = self._get_credentials()
+            logger.debug("Solana configuration is valid")
+            return True
+
+        except Exception as e:
+            if verbose:
+                error_msg = str(e)
+                if isinstance(e, SolanaConfigurationError):
+                    error_msg = f"Configuration error: {error_msg}"
+                elif isinstance(e, SolanaConnectionError):
+                    error_msg = f"API validation error: {error_msg}"
+                logger.debug(f"Solana Configuration validation failed: {error_msg}")
+            return False
         return True
 
     def transfer(self, to_address: str, amount: float, token_mint: Optional[str] = None) -> bool:
         logger.info(f"STUB: Transfer {amount} to {to_address}")
-        return True
+        try:
+                if token_mint:
+                    signature = SolanaTransferHelper.transfer_spl_tokens(self, to_address, amount, token_mint)
+                    token_identifier = str(token_mint)
+                else:
+                    signature = SolanaTransferHelper.transfer_native_sol(self, to_address, amount)
+                    token_identifier = "SOL"
+                SolanaTransferHelper.confirm_transaction(self, signature)
+
+                
+                logger.info(f'\nSuccess!\n\nSignature: {signature}\nFrom Address: {str(self._get_wallet().pubkey())}\nTo Address: {to_address}\nAmount: {amount}\nToken: {token_identifier}')
+
+                return True
+
+        except Exception as error:
+
+            logger.error(f"Transfer failed: {error}")
+            raise RuntimeError(f"Transfer operation failed: {error}") from error
+            
 
     def trade(self, output_mint: str, input_amount: float, 
              input_mint: Optional[str] = None, slippage_bps: int = 100) -> bool:
@@ -196,3 +300,120 @@ class SolanaConnection(BaseConnection):
         method_name = action_name.replace('-', '_')
         method = getattr(self, method_name)
         return method(**kwargs)
+    
+class SolanaTransferHelper:
+    """Helper class for Solana token and SOL transfers."""
+
+    @staticmethod
+    def transfer_native_sol(agent: SolanaConnection, to: Pubkey, amount: float) -> str:
+        """
+        Transfer native SOL.
+
+        Args:
+            agent: SolanaAgentKit instance
+            to: Recipient's public key
+            amount: Amount of SOL to transfer
+
+        Returns:
+            Transaction signature.
+        """
+        connection = agent._get_connection()
+        receiver=Pubkey.from_string(to)
+        sender = agent._get_wallet()
+        ix = transfer(
+            TransferParams(
+                from_pubkey=sender.pubkey(),to_pubkey=receiver,lamports=LAMPORTS_PER_SOL
+            )
+        )
+        blockhash=connection.get_latest_blockhash().value.blockhash
+        msg = MessageV0.try_compile(
+            payer=sender.pubkey(),
+            instructions=[ix],
+            address_lookup_table_accounts=[],
+            recent_blockhash=blockhash
+        )
+        tx= VersionedTransaction(msg,[sender])
+
+        result = agent._get_connection().send_transaction(
+            tx
+        )
+
+        return result.value
+
+    @staticmethod
+    def transfer_spl_tokens(
+        rpc_client: Client,
+        agent:SolanaConnection,
+        recipient: Pubkey,
+        spl_token: Pubkey,
+        amount: float,
+    ) -> str:
+        """
+        Transfer SPL tokens from payer to recipient.
+
+        Args:
+            rpc_client: Async RPC client instance.
+            payer: Payer's public key (wallet address).
+            recipient: Recipient's public key.
+            spl_token: SPL token mint address.
+            amount: Amount of tokens to transfer.
+
+        Returns:
+            Transaction signature.
+        """
+        connection = agent._get_connection()
+        sender =agent._get_wallet()
+        spl_client = Token(rpc_client, spl_token, TOKEN_PROGRAM_ID, sender.pubkey())
+        
+        mint = spl_client.get_mint_info()
+        if not mint.is_initialized:
+            raise ValueError("Token mint is not initialized.")
+
+        token_decimals = mint.decimals
+        if amount < 10 ** -token_decimals:
+            raise ValueError("Invalid amount of decimals for the token.")
+
+        tokens = math.floor(amount * (10 ** token_decimals))
+
+        payer_ata = get_associated_token_address(sender.pubkey(), spl_token)
+        recipient_ata = get_associated_token_address(recipient, spl_token)
+
+        payer_account_info = spl_client.get_account_info(payer_ata)
+        if not payer_account_info.is_initialized:
+            raise ValueError("Payer's associated token account is not initialized.")
+        if tokens > payer_account_info.amount:
+            raise ValueError("Insufficient funds in payer's token account.")
+
+        recipient_account_info = spl_client.get_account_info(recipient_ata)
+        if not recipient_account_info.is_initialized:
+            raise ValueError("Recipient's associated token account is not initialized.")
+
+        transfer_instruction = transfer_checked(
+            amount=tokens,
+            decimals=token_decimals,
+            program_id=TOKEN_PROGRAM_ID,
+            owner=sender.pubkey(),
+            source=payer_ata,
+            dest=recipient_ata,
+            mint=spl_token,
+        )
+        
+        blockhash=connection.get_latest_blockhash().value.blockhash
+        msg = MessageV0.try_compile(
+            payer=sender.pubkey(),
+            instructions=[transfer_instruction],
+            address_lookup_table_accounts=[],
+            recent_blockhash=blockhash
+        )
+        tx= VersionedTransaction(msg,[sender])
+
+        result = agent._get_connection().send_transaction(
+            tx
+        )
+
+        return result.value
+
+    @staticmethod
+    def confirm_transaction(agent: SolanaConnection, signature: str) -> None:
+        """Wait for transaction confirmation."""
+        agent._get_connection().confirm_transaction(signature, commitment=Confirmed)

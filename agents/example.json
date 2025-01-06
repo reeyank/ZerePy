@@ -38,7 +38,7 @@
     },
     {
       "name": "solana",
-      "network": "devnet"
+      "rpc": "http://127.0.0.1:8899"
     }
   ],
   "tasks": [
