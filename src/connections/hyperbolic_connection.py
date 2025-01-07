@@ -163,29 +163,33 @@ class HyperbolicConnection(BaseConnection):
         except Exception as e:
             raise HyperbolicAPIError(f"Text generation failed: {e}")
 
-    def check_model(self, model, **kwargs):
+    def check_model(self, model: str, **kwargs) -> bool:
+        """Check if a specific model is available"""
         try:
             client = self._get_client()
             try:
-                client.models.retrieve(model=model)
-                # If we get here, the model exists
-                return True
-            except Exception:
+                models = client.models.list()
+                for hyperbolic_model in models.data:
+                    if hyperbolic_model.id == model:
+                        return True
                 return False
+            except Exception as e:
+                raise HyperbolicAPIError(f"Model check failed: {e}")
+                
         except Exception as e:
-            raise HyperbolicAPIError(e)
+            raise HyperbolicAPIError(f"Model check failed: {e}")
 
     def list_models(self, **kwargs) -> None:
         """List all available Hyperbolic models"""
         try:
             client = self._get_client()
             response = client.models.list().data
-            
+        
+            model_ids= [model.id for model in response]
+
             logger.info("\nAVAILABLE MODELS:")
-            logger.info("1. meta-llama/Meta-Llama-3-70B-Instruct")
-            logger.info("2. meta-llama/Meta-Llama-3-13B-Instruct")
-            logger.info("3. meta-llama/Meta-Llama-3-34B-Instruct")
-            logger.info("4. mistral/Mistral-7B-v0.2-Instruct")
+            for i, model_id in enumerate(model_ids, start=1):
+                logger.info(f"{i}. {model_id}")
                     
         except Exception as e:
             raise HyperbolicAPIError(f"Listing models failed: {e}")
