@@ -26,8 +26,9 @@ from solders.message import MessageV0, to_bytes_versioned # type: ignore
 
 # src
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
-from src.types import TransferResult, JupiterTokenData, NetworkPerformanceMetrics
+from src.types import TransferResult, JupiterTokenData, NetworkPerformanceMetrics, PumpfunTokenOptions, TokenLaunchResult
 from src.constants import LAMPORTS_PER_SOL, DEFAULT_OPTIONS, JUP_API, TOKENS
+from agentipy.utils.send_tx import sign_and_send_transaction
 
 # spl
 from spl.token.client import Token
@@ -328,13 +329,14 @@ class SolanaConnection(BaseConnection):
         res = asyncio.run(res)
         logger.info(f"Requested faucet funds\nTransaction ID: {res}")
         return True
-#todo w
+
     def deploy_token(self, decimals: int = 9) -> str:
         logger.info(f"STUB: Deploy token with {decimals} decimals")
         res = TokenDeploymentManager.deploy_token(self,decimals)
         res = asyncio.run(res)
         logger.info(f"Deployed token with {decimals} decimals\nToken Mint: {res['mint']}")
         return res['mint']
+
     def fetch_price(self, token_id: str) -> float:
         url = f"https://api.jup.ag/price/v2?ids={token_id}"
 
@@ -351,7 +353,7 @@ class SolanaConnection(BaseConnection):
         except Exception as e:
             raise Exception(f"Price fetch failed: {str(e)}")
         return 1.23
-#todo: test
+#todo: test on mainnet
     def get_tps(self) -> int:
         return SolanaPerformanceTracker.fetch_current_tps(self)
 
@@ -402,16 +404,17 @@ class SolanaConnection(BaseConnection):
         except Exception as error:
             raise Exception(f"Error fetching token data: {str(error)}")
 
-#todo w
+#todo: test on mainnet
     def launch_pump_token(self, token_name: str, token_ticker: str, 
                          description: str, image_url: str, 
                          options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        return {
-            "name": token_name,
-            "ticker": token_ticker,
-            "mint": "STUB_MINT_ADDRESS",
-            "decimals": 9,
-        }
+        logger.info(f"STUB: Launch Pump & Fun token {token_ticker}")
+        res = PumpfunTokenManager.launch_pumpfun_token(self, token_name, token_ticker, description, image_url, options)
+        res = asyncio.run(res)
+        logger.info(f"Launched Pump & Fun token {token_ticker}\nToken Mint: {res['mint']}")
+        return res
+
+
     def perform_action(self, action_name: str, kwargs) -> Any:
         """Execute a Solana action with validation"""
         if action_name not in self.actions:
@@ -711,7 +714,7 @@ class TradeManager:
             opts = TxOpts(skip_preflight=False, preflight_commitment=Processed)
             result = await async_client.send_raw_transaction(txn=bytes(signed_txn), opts=opts)
             transaction_id = json.loads(result.to_json())['result']
-            print(f"Transaction sent: https://explorer.solana.com/tx/{transaction_id}")
+            logger.info(f"Transaction sent: https://explorer.solana.com/tx/{transaction_id}")
             return str(signature)
 
         except Exception as e:
@@ -741,7 +744,7 @@ class StakeManager:
             opts = TxOpts(skip_preflight=False, preflight_commitment=Processed)
             result = await connection.send_raw_transaction(txn=bytes(signed_txn), opts=opts)
             transaction_id = json.loads(result.to_json())['result']
-            print(f"Transaction sent: https://explorer.solana.com/tx/{transaction_id}")
+            logger.info(f"Transaction sent: https://explorer.solana.com/tx/{transaction_id}")
             return str(signature)
 
         except Exception as e:
@@ -772,7 +775,7 @@ class AssetLender:
             result = await async_client.send_raw_transaction(txn=bytes(signed_txn), opts=opts)
             transaction_id = json.loads(result.to_json())['result']
         
-            print(f"Transaction sent: https://explorer.solana.com/tx/{transaction_id}")
+            logger.info(f"Transaction sent: https://explorer.solana.com/tx/{transaction_id}")
             return str(signature)
 
         except Exception as e:
@@ -796,7 +799,7 @@ class FaucetManager:
         wallet = agent._get_wallet()
         async_client = agent._get_connection_async()
         try:
-            print(f"Requesting faucet for wallet: {repr(wallet.pubkey())}")
+            logger.info(f"Requesting faucet for wallet: {repr(wallet.pubkey())}")
 
             response = await async_client.request_airdrop(
                 wallet.pubkey(), 5 * LAMPORTS_PER_SOL
@@ -809,7 +812,7 @@ class FaucetManager:
                 last_valid_block_height=latest_blockhash.value.last_valid_block_height
             )
 
-            print(f"Airdrop successful, transaction signature: {response.value}")
+            logger.info(f"Airdrop successful, transaction signature: {response.value}")
             return response.value
         except KeyError:
             raise Exception("Airdrop response did not contain a transaction signature.")
@@ -887,11 +890,11 @@ class TokenDeploymentManager:
 
             tx_resp = await async_client.send_raw_transaction(transaction.serialize(), opts=TxOpts(preflight_commitment=Confirmed))
 
-            print(f"resp {tx_resp}")
+            logger.info(f"resp {tx_resp}")
 
             tx_id = tx_resp.value
 
-            print(f"tx_id {tx_id}")
+            logger.info(f"tx_id {tx_id}")
 
             await async_client.confirm_transaction(
                 tx_id,
@@ -899,7 +902,7 @@ class TokenDeploymentManager:
                 last_valid_block_height=blockhash.value.last_valid_block_height,
             )
 
-            print(f"https://explorer.solana.com/tx/{tx_resp}")
+            logger.info(f"https://explorer.solana.com/tx/{tx_resp}")
 
             await client.close()
 
@@ -913,3 +916,182 @@ class TokenDeploymentManager:
         except Exception as e:
             logger.error(f"Token deployment failed: {str(e)}")
             raise Exception(f"Token deployment failed: {str(e)}")
+        
+class PumpfunTokenManager:
+    @staticmethod
+    async def _upload_metadata(
+        session: aiohttp.ClientSession,
+        token_name: str,
+        token_ticker: str,
+        description: str,
+        image_url: str,
+        options: Optional[PumpfunTokenOptions] = None
+    ) -> Dict[str, Any]:
+        """
+        Uploads token metadata and image to IPFS via Pump.fun.
+
+        Args:
+            session: An active aiohttp.ClientSession object
+            token_name: Name of the token
+            token_ticker: Token symbol/ticker
+            description: Token description
+            image_url: URL of the token image
+            options: Optional token configuration
+
+        Returns:
+            A dictionary containing the metadata response from the server.
+        """
+        logger.debug("Preparing form data for IPFS upload...")
+        form_data = aiohttp.FormData()
+        form_data.add_field("name", token_name)
+        form_data.add_field("symbol", token_ticker)
+        form_data.add_field("description", description)
+        form_data.add_field("showName", "true")
+
+        if options:
+            if options.twitter:
+                form_data.add_field("twitter", options.twitter)
+            if options.telegram:
+                form_data.add_field("telegram", options.telegram)
+            if options.website:
+                form_data.add_field("website", options.website)
+
+        logger.debug(f"Downloading image from {image_url}...")
+        async with session.get(image_url) as image_response:
+            logger.debug(f"Image response: {image_response}")
+            if image_response.status != 200:
+                raise ValueError(f"Failed to download image from {image_url} (status {image_response.status})")
+            image_data = await image_response.read()
+
+        form_data.add_field(
+            "file",
+            image_data,
+            filename="token_image.png",
+            content_type="image/png"
+        )
+
+        logger.debug("Uploading metadata to Pump.fun IPFS endpoint...")
+        async with session.post("https://pump.fun/api/ipfs", data=form_data) as response:
+            if response.status != 200:
+                error_text = await response.text()
+                raise RuntimeError(f"Metadata upload failed (status {response.status}): {error_text}")
+
+            return await response.json()
+
+    @staticmethod
+    async def _create_token_transaction(
+        session: aiohttp.ClientSession,
+        agent: SolanaConnection,
+        mint_keypair: Keypair,
+        metadata_response: Dict[str, Any],
+        options: Optional[PumpfunTokenOptions] = None
+    ) -> bytes:
+        """
+        Creates a token transaction via the Pump.fun API.
+
+        Args:
+            session: An active aiohttp.ClientSession object
+            agent: SolanaAgentKit instance
+            mint_keypair: The Keypair for the token mint
+            metadata_response: The response from the metadata upload
+            options: Optional token configuration
+
+        Returns:
+            Serialized transaction bytes.
+        """
+        wallet = agent._get_wallet()
+        options = options or PumpfunTokenOptions()
+
+        payload = {
+            "publicKey": str(wallet.pubkey()),
+            "action": "create",
+            "tokenMetadata": {
+                "name": metadata_response["metadata"]["name"],
+                "symbol": metadata_response["metadata"]["symbol"],
+                "uri": metadata_response["metadataUri"],
+            },
+            "mint": str(mint_keypair.pubkey()),
+            "denominatedInSol": "true",
+            "amount": options.initial_liquidity_sol,
+            "slippage": options.slippage_bps,
+            "priorityFee": options.priority_fee,
+            "pool": "pump"
+        }
+
+        logger.debug("Requesting token transaction from Pump.fun...")
+        async with session.post("https://pumpportal.fun/api/trade-local", json=payload) as response:
+            if response.status != 200:
+                error_text = await response.text()
+                raise RuntimeError(f"Transaction creation failed (status {response.status}): {error_text}")
+
+            tx_data = await response.read()
+            return tx_data
+
+    @staticmethod
+    async def launch_pumpfun_token(
+        agent: SolanaConnection,
+        token_name: str,
+        token_ticker: str,
+        description: str,
+        image_url: str,
+        options: Optional[PumpfunTokenOptions] = None
+    ) -> TokenLaunchResult:
+        """
+        Launches a new token on Pump.fun.
+
+        Args:
+            agent: SolanaAgentKit instance
+            token_name: Name of the token
+            token_ticker: Token symbol/ticker
+            description: Token description
+            image_url: URL of the token image
+            options: Optional token configuration
+
+        Returns:
+            TokenLaunchResult containing the transaction signature, mint address, and metadata URI.
+        """
+        logger.info("Starting token launch process...")
+        mint_keypair = Keypair()
+        logger.info(f"Mint public key: {mint_keypair.pubkey()}")
+        wallet = agent._get_wallet()
+        async_client = agent._get_connection_async()
+        try:
+            # Use a single aiohttp session for both metadata upload and transaction creation
+            async with aiohttp.ClientSession() as session:
+                logger.info("Uploading metadata to IPFS...")
+                metadata_response = await PumpfunTokenManager._upload_metadata(
+                    session,
+                    token_name,
+                    token_ticker,
+                    description,
+                    image_url,
+                    options
+                )
+                logger.debug(f"Metadata response: {metadata_response}")
+
+                logger.info("Creating token transaction...")
+                tx_data = await PumpfunTokenManager._create_token_transaction(
+                    session,
+                    agent,
+                    mint_keypair,
+                    metadata_response,
+                    options
+                )
+                logger.debug("Deserializing transaction...")
+                tx = VersionedTransaction.from_bytes(tx_data)
+                signature = wallet.sign_message(message.to_bytes_versioned(tx.message))
+                signed_txn = VersionedTransaction.populate(tx.message, [signature])
+                opts = TxOpts(skip_preflight=False, preflight_commitment=Processed)
+                result = await async_client.send_raw_transaction(txn=bytes(signed_txn), opts=opts)
+                transaction_id = json.loads(result.to_json())['result']
+            
+                logger.info(f"Transaction sent: https://explorer.solana.com/tx/{transaction_id}")
+                logger.info(f'Mint: {str(mint_keypair.pubkey())}\nSignature: {signature}\nMetadata URI: {metadata_response["metadataUri"]}')
+                # close the session
+                await session.close()
+
+                return True
+
+        except Exception as error:
+            logger.error(f"Error in launch_pumpfun_token: {error}")
+            raise Exception(f"Token launch failed: {str(error)}") from error
