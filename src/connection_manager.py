@@ -6,6 +6,8 @@ from src.connections.eternalai_connection import EternalAIConnection
 from src.connections.openai_connection import OpenAIConnection
 from src.connections.twitter_connection import TwitterConnection
 from src.connections.farcaster_connection import FarcasterConnection
+from src.connections.ollama_connection import OllamaConnection
+from src.connections.echochambers_connection import EchochambersConnection
 
 logger = logging.getLogger("connection_manager")
 
@@ -27,6 +29,10 @@ class ConnectionManager:
             return FarcasterConnection
         elif class_name == "eternalai":
             return EternalAIConnection
+        elif class_name == "ollama":
+            return OllamaConnection
+        elif class_name == "echochambers":
+            return EchochambersConnection
 
         return None
     
