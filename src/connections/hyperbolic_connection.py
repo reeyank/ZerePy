@@ -194,6 +194,12 @@ class HyperbolicConnection(BaseConnection):
         if action_name not in self.actions:
             raise KeyError(f"Unknown action: {action_name}")
 
+        # Explicitly reload environment variables
+        load_dotenv()
+        
+        if not self.is_configured(verbose=True):
+            raise HyperbolicConfigurationError("Hyperbolic is not properly configured")
+
         action = self.actions[action_name]
         errors = action.validate_params(kwargs)
         if errors:
