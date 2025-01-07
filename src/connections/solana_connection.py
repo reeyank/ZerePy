@@ -305,6 +305,9 @@ class SolanaConnection(BaseConnection):
 #todo w
     def request_faucet(self) -> bool:
         logger.info("STUB: Requesting faucet funds")
+        res = FaucetManager.request_faucet_funds(self)
+        res = asyncio.run(res)
+        logger.info(f"Requested faucet funds\nTransaction ID: {res}")
         return True
 #todo w
     def deploy_token(self, decimals: int = 9) -> str:
@@ -638,7 +641,7 @@ class SolanaPerformanceTracker:
 
         except Exception as error:
             raise ValueError(f"Failed to fetch TPS: {str(error)}") from error
-
+        
 class TradeManager:
     @staticmethod
     async def _trade(
@@ -691,7 +694,6 @@ class TradeManager:
         except Exception as e:
             raise Exception(f"Swap failed: {str(e)}")
         
-
 class StakeManager:
     @staticmethod
     async def stake_with_jup(agent: SolanaConnection, amount: float) -> str:
@@ -721,6 +723,7 @@ class StakeManager:
 
         except Exception as e:
             raise Exception(f"jupSOL staking failed: {str(e)}") 
+        
 class AssetLender:
     @staticmethod
     async def lend_asset(agent: SolanaConnection, amount: float) -> str:
@@ -751,3 +754,41 @@ class AssetLender:
 
         except Exception as e:
             raise Exception(f"Lending failed: {str(e)}")
+
+class FaucetManager:
+    @staticmethod
+    async def request_faucet_funds(agent: SolanaConnection) -> str:
+        """
+        Request SOL from the Solana faucet (devnet/testnet only).
+
+        Args:
+            agent: An object with `connection` (AsyncClient) and `wallet_address` (str).
+
+        Returns:
+            str: The transaction signature.
+
+        Raises:
+            Exception: If the request fails or times out.
+        """
+        wallet = agent._get_wallet()
+        async_client = agent._get_connection_async()
+        try:
+            print(f"Requesting faucet for wallet: {repr(wallet.pubkey())}")
+
+            response = await async_client.request_airdrop(
+                wallet.pubkey(), 5 * LAMPORTS_PER_SOL
+            )
+
+            latest_blockhash = await async_client.get_latest_blockhash()
+            await async_client.confirm_transaction(
+                response.value,
+                commitment=Confirmed,
+                last_valid_block_height=latest_blockhash.value.last_valid_block_height
+            )
+
+            print(f"Airdrop successful, transaction signature: {response.value}")
+            return response.value
+        except KeyError:
+            raise Exception("Airdrop response did not contain a transaction signature.")
+        except Exception as e:
+            raise Exception(f"An error occurred: {str(e)}")
