@@ -286,14 +286,20 @@ class SolanaConnection(BaseConnection):
         except Exception as error:
             raise Exception(f"Failed to get balance: {str(error)}") from error
 
-#todo w
+# todo: test on mainnet
     def stake(self, amount: float) -> bool:
         logger.info(f"STUB: Stake {amount} SOL")
+        res = StakeManager.stake_with_jup(self, amount)
+        res = asyncio.run(res)
+        logger.info(f"Staked {amount} SOL\nTransaction ID: {res}")
         return True
 
-#todo w
+#todo: test on mainnet
     def lend_assets(self, amount: float) -> bool:
         logger.info(f"STUB: Lend {amount}")
+        res = AssetLender.lend_asset(self, amount)
+        res = asyncio.run(res)
+        logger.info(f"Lent {amount} USDC\nTransaction ID: {res}")
         return True
 
 #todo w
@@ -641,7 +647,7 @@ class TradeManager:
         input_amount: float,
         input_mint: Pubkey,
         slippage_bps: int,
-    ):
+    ) -> str:
         """
         Swap tokens using Jupiter Exchange.
 
@@ -680,66 +686,50 @@ class TradeManager:
             result = await async_client.send_raw_transaction(txn=bytes(signed_txn), opts=opts)
             transaction_id = json.loads(result.to_json())['result']
             print(f"Transaction sent: https://explorer.solana.com/tx/{transaction_id}")
+            return str(signature)
 
         except Exception as e:
             raise Exception(f"Swap failed: {str(e)}")
         
-"""     @staticmethod
-    def trade(
-    agent: SolanaConnection,
-    output_mint: Pubkey,
-    input_amount: float,
-    input_mint: Pubkey = TOKENS["USDC"],
-    slippage_bps: int = DEFAULT_OPTIONS["SLIPPAGE_BPS"],
-) -> str:
-        return asyncio.run(TradeManager._trade(agent, output_mint, input_amount, input_mint, slippage_bps)) """
-        
-        
-""" class StakeManager:
+
+class StakeManager:
     @staticmethod
-    def stake_with_jup(agent: SolanaConnection, amount: float) -> str:
+    async def stake_with_jup(agent: SolanaConnection, amount: float) -> str:
         
-        connection = agent._get_connection()
+        connection = agent._get_connection_async()
         wallet = agent._get_wallet()
         try:
 
             url = f"https://worker.jup.ag/blinks/swap/So11111111111111111111111111111111111111112/jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v/{amount}"
             payload = {"account": str(wallet.pubkey())}
 
-            with requests.post(url, json=payload) as res:
-                res.raise_for_status()
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload) as res:
+                    if res.status != 200:
+                        raise Exception(f"Failed to fetch transaction: {res.status}")
 
-                data = res.json()
+                    data = await res.json()
 
-            
-            txn = VersionedTransaction.from_bytes(base64.b64decode(data["transaction"]))
-
-
-            latest_blockhash = connection.get_latest_blockhash()
-
-            signature = connection.send_raw_transaction(
-                base64.b64decode(data["transaction"]),
-            )
-
-            connection.confirm_transaction(
-                signature,
-                commitment=Confirmed,
-                last_valid_block_height=latest_blockhash.value.last_valid_block_height,
-            )
-
+            raw_transaction = VersionedTransaction.from_bytes(base64.b64decode(data["transaction"]))
+            signature = wallet.sign_message(message.to_bytes_versioned(raw_transaction.message))
+            signed_txn = VersionedTransaction.populate(raw_transaction.message, [signature])
+            opts = TxOpts(skip_preflight=False, preflight_commitment=Processed)
+            result = await connection.send_raw_transaction(txn=bytes(signed_txn), opts=opts)
+            transaction_id = json.loads(result.to_json())['result']
+            print(f"Transaction sent: https://explorer.solana.com/tx/{transaction_id}")
             return str(signature)
 
         except Exception as e:
-            raise Exception(f"jupSOL staking failed: {str(e)}") """
-
-""" class AssetLender:
+            raise Exception(f"jupSOL staking failed: {str(e)}") 
+class AssetLender:
     @staticmethod
-    async def lend_asset(agent: SolanaAgentKit, amount: float) -> str:
-       
+    async def lend_asset(agent: SolanaConnection, amount: float) -> str:
+        wallet = agent._get_wallet()
+        async_client = agent._get_connection_async()
         try:
             url = f"https://blink.lulo.fi/actions?amount={amount}&symbol=USDC"
             headers = {"Content-Type": "application/json"}
-            payload = json.dumps({"account": str(agent.wallet.pubkey())})
+            payload = json.dumps({"account": str(wallet.pubkey())})
 
             session = aiohttp.ClientSession()
 
@@ -747,24 +737,17 @@ class TradeManager:
                 if response.status != 200:
                     raise Exception(f"Lulo API Error: {response.status}")
                 data = await response.json()
-
-            transaction_bytes = base64.b64decode(data["transaction"])
-            lulo_txn = VersionedTransaction.deserialize(transaction_bytes)
-
-            latest_blockhash = await agent.connection.get_latest_blockhash()
-            lulo_txn.message.recent_blockhash = latest_blockhash.value.blockhash
-
-            lulo_txn.sign([agent.wallet])
-
-            signature = await agent.connection.send_transaction(lulo_txn, opts={"preflight_commitment": Confirmed})
-            
-            await agent.connection.confirm_transaction(
-                tx_sig=signature,
-                last_valid_block_height=latest_blockhash.value.last_valid_block_height,
-                commitment=Confirmed,
-            )
-
+                logger.debug(f"Lending data: {data}")
+            transaction_data = base64.b64decode(data["transaction"])
+            raw_transaction = VersionedTransaction.from_bytes(transaction_data)
+            signature = wallet.sign_message(message.to_bytes_versioned(raw_transaction.message))
+            signed_txn = VersionedTransaction.populate(raw_transaction.message, [signature])
+            opts = TxOpts(skip_preflight=False, preflight_commitment=Processed)
+            result = await async_client.send_raw_transaction(txn=bytes(signed_txn), opts=opts)
+            transaction_id = json.loads(result.to_json())['result']
+        
+            print(f"Transaction sent: https://explorer.solana.com/tx/{transaction_id}")
             return str(signature)
 
         except Exception as e:
-            raise Exception(f"Lending failed: {str(e)}") """
+            raise Exception(f"Lending failed: {str(e)}")
