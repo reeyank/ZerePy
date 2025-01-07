@@ -40,6 +40,11 @@
       "model": "claude-3-5-sonnet-20241022"
     },
     {
+      "name": "eternalai",
+      "model": "NousResearch/Hermes-3-Llama-3.1-70B-FP8",
+      "chain_id": "45762"
+    },
+    {
       "name": "ollama",
       "base_url": "http://localhost:11434",
       "model": "llama3.2"
