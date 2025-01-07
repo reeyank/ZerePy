@@ -48,6 +48,10 @@
       "name": "ollama",
       "base_url": "http://localhost:11434",
       "model": "llama3.2"
+    },
+    {
+      "name": "hyperbolic",
+      "model": "meta-llama/Meta-Llama-3-70B-Instruct"
     }
   ],
   "tasks": [
