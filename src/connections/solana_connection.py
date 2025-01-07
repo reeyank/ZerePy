@@ -3,21 +3,26 @@ import logging
 import os
 from typing import Dict, Any, List, Optional
 from dotenv import set_key, load_dotenv
-import math
+import math, json
 import aiohttp
 import requests
-
+from jupiter_python_sdk.jupiter import Jupiter
+import asyncio
 # solana
 from solana.rpc.api import Client
+from solana.rpc.async_api import AsyncClient
 from solana.rpc.commitment import Confirmed
+from solana.rpc.commitment import Processed
+from solana.rpc.types import TxOpts
 
 # solders
+from solders import message
 from solders.keypair import Keypair  # type: ignore
 from solders.pubkey import Pubkey  # type: ignore
 from solders.system_program import TransferParams, transfer
 from solders.transaction import VersionedTransaction # type: ignore
 from solders.hash import Hash  # type: ignore
-from solders.message import MessageV0 # type: ignore
+from solders.message import MessageV0, to_bytes_versioned # type: ignore
 
 # src
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
@@ -53,6 +58,10 @@ class SolanaConnection(BaseConnection):
         if not conn.is_connected():
             raise SolanaConnectionError("rpc invalid connection")
         return conn
+    def _get_connection_async(self) -> AsyncClient:
+        conn = AsyncClient(self.config['rpc'])
+        return conn
+
     def _get_wallet(self):
         creds = self._get_credentials()
         return Keypair.from_base58_string(creds['SOLANA_PRIVATE_KEY'])
@@ -82,7 +91,19 @@ class SolanaConnection(BaseConnection):
         Keypair.from_base58_string(credentials['SOLANA_PRIVATE_KEY'])
         logger.debug("All required credentials found")
         return credentials
-
+    def _get_jupiter(self,private_key,async_client):
+        jupiter = Jupiter(
+            async_client=async_client,
+            keypair=private_key,
+            quote_api_url="https://quote-api.jup.ag/v6/quote?",
+            swap_api_url="https://quote-api.jup.ag/v6/swap",
+            open_order_api_url="https://jup.ag/api/limit/v1/createOrder",
+            cancel_orders_api_url="https://jup.ag/api/limit/v1/cancelOrders",
+            query_open_orders_api_url="https://jup.ag/api/limit/v1/openOrders?wallet=",
+            query_order_history_api_url="https://jup.ag/api/limit/v1/orderHistory",
+            query_trade_history_api_url="https://jup.ag/api/limit/v1/tradeHistory"
+        )
+        return jupiter
     def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Validate Solana configuration from JSON"""
         required_fields = ["rpc"]
@@ -233,11 +254,12 @@ class SolanaConnection(BaseConnection):
             logger.error(f"Transfer failed: {error}")
             raise RuntimeError(f"Transfer operation failed: {error}") from error
             
-#todo: test
+# todo: test on mainnet
     def trade(self, output_mint: str, input_amount: float, 
-             input_mint: Optional[str] = TOKENS['SOL'], slippage_bps: int = 100) -> bool:
+             input_mint: Optional[str] = TOKENS['USDC'], slippage_bps: int = 100) -> bool:
         logger.info(f"STUB: Swap {input_amount} for {output_mint}")
-        TradeManager.trade(self,output_mint,input_amount,input_mint,slippage_bps)
+        res = TradeManager._trade(self,output_mint,input_amount,input_mint,slippage_bps)
+        asyncio.run(res)
         return True
 
     def get_balance(self, token_address: Optional[str] = None) -> float:
@@ -613,13 +635,13 @@ class SolanaPerformanceTracker:
 
 class TradeManager:
     @staticmethod
-    def trade(
-    agent: SolanaConnection,
-    output_mint: Pubkey,
-    input_amount: float,
-    input_mint: Pubkey = TOKENS["SOL"],
-    slippage_bps: int = DEFAULT_OPTIONS["SLIPPAGE_BPS"],
-) -> str:
+    async def _trade(
+        agent: SolanaConnection,
+        output_mint: Pubkey,
+        input_amount: float,
+        input_mint: Pubkey,
+        slippage_bps: int,
+    ):
         """
         Swap tokens using Jupiter Exchange.
 
@@ -636,56 +658,42 @@ class TradeManager:
         Raises:
             Exception: If the swap fails.
         """
-        connection = agent._get_connection()
+        wallet = agent._get_wallet()
+        async_client = agent._get_connection_async()
+        jupiter = agent._get_jupiter(wallet,async_client)
+        # convert wallet.secret() from bytes to string
+        input_mint = str(input_mint)
+        output_mint = str(output_mint)
+        input_amount: int = int(input_amount * 10 ** DEFAULT_OPTIONS["TOKEN_DECIMALS"])
+
         try:
-            quote_url = (
-                f"{JUP_API}/quote?"
-                f"inputMint={input_mint}"
-                f"&outputMint={output_mint}"
-                f"&amount={int(input_amount * LAMPORTS_PER_SOL)}"
-                f"&slippageBps={slippage_bps}"
-                f"&onlyDirectRoutes=true"
-                f"&maxAccounts=20"
+            transaction_data = await jupiter.swap(
+                input_mint,
+                output_mint,
+                input_amount,
+                slippage_bps=slippage_bps,
             )
-            with requests.get(quote_url) as quote_response:
-                quote_response.raise_for_status()
-                quote_data = quote_response.json()
-
-                with requests.post(
-                    f"{JUP_API}/swap",
-                    json={
-                        "quoteResponse": quote_data,
-                        "userPublicKey": str(agent.wallet_address),
-                        "wrapAndUnwrapSol": True,
-                        "dynamicComputeUnitLimit": True,
-                        "prioritizationFeeLamports": "auto",
-                    },
-                ) as swap_response:
-                    swap_response.raise_for_status()
-                    swap_data = swap_response.json()
-
-            swap_transaction_buf = base64.b64decode(swap_data["swapTransaction"])
-            transaction = VersionedTransaction.deserialize(swap_transaction_buf)
-
-            latest_blockhash = connection.get_latest_blockhash()
-            transaction.message.recent_blockhash = latest_blockhash.value.blockhash
-
-            transaction.sign([agent.wallet])
-
-            signature = connection.send_raw_transaction(
-                transaction.serialize(), opts={"skip_preflight": False, "max_retries": 3}
-            )
-
-            connection.confirm_transaction(
-                signature,
-                commitment=Confirmed,
-                last_valid_block_height=latest_blockhash.value.last_valid_block_height,
-            )
-
-            return str(signature)
+            raw_transaction = VersionedTransaction.from_bytes(base64.b64decode(transaction_data))
+            signature = wallet.sign_message(message.to_bytes_versioned(raw_transaction.message))
+            signed_txn = VersionedTransaction.populate(raw_transaction.message, [signature])
+            opts = TxOpts(skip_preflight=False, preflight_commitment=Processed)
+            result = await async_client.send_raw_transaction(txn=bytes(signed_txn), opts=opts)
+            transaction_id = json.loads(result.to_json())['result']
+            print(f"Transaction sent: https://explorer.solana.com/tx/{transaction_id}")
 
         except Exception as e:
             raise Exception(f"Swap failed: {str(e)}")
+        
+"""     @staticmethod
+    def trade(
+    agent: SolanaConnection,
+    output_mint: Pubkey,
+    input_amount: float,
+    input_mint: Pubkey = TOKENS["USDC"],
+    slippage_bps: int = DEFAULT_OPTIONS["SLIPPAGE_BPS"],
+) -> str:
+        return asyncio.run(TradeManager._trade(agent, output_mint, input_amount, input_mint, slippage_bps)) """
+        
         
 """ class StakeManager:
     @staticmethod
