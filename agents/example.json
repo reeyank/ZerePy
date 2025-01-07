@@ -38,6 +38,11 @@
     {
       "name": "anthropic",
       "model": "claude-3-5-sonnet-20241022"
+    },
+    {
+      "name": "ollama",
+      "base_url": "http://localhost:11434",
+      "model": "llama3.2"
     }
   ],
   "tasks": [
