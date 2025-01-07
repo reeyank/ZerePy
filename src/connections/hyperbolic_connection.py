@@ -5,7 +5,7 @@ from dotenv import load_dotenv, set_key
 from openai import OpenAI
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("connectinos.hyperbolic_connection")
 
 class HyperbolicConnectionError(Exception):
     """Base exception for Hyperbolic connection errors"""
@@ -50,7 +50,8 @@ class HyperbolicConnection(BaseConnection):
                 parameters=[
                     ActionParameter("prompt", True, str, "The input prompt for text generation"),
                     ActionParameter("system_prompt", True, str, "System prompt to guide the model"),
-                    ActionParameter("model", False, str, "Model to use for generation")
+                    ActionParameter("model", False, str, "Model to use for generation"),
+                    ActionParameter("temperature", False, float, "A decimal number that determines the degree of randomness in the response.")
                 ],
                 description="Generate text using Hyperbolic models"
             ),
