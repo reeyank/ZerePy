@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 from typing import Dict, Any
@@ -8,21 +7,17 @@ from src.connections.base_connection import BaseConnection, Action, ActionParame
 
 logger = logging.getLogger(__name__)
 
-
 class EternalAIConnectionError(Exception):
     """Base exception for EternalAI connection errors"""
     pass
-
 
 class EternalAIConfigurationError(EternalAIConnectionError):
     """Raised when there are configuration/credential issues"""
     pass
 
-
 class EternalAIAPIError(EternalAIConnectionError):
     """Raised when EternalAI API requests fail"""
     pass
-
 
 class EternalAIConnection(BaseConnection):
     def __init__(self, config: Dict[str, Any]):
@@ -37,14 +32,13 @@ class EternalAIConnection(BaseConnection):
         """Validate EternalAI configuration from JSON"""
         required_fields = ["model"]
         missing_fields = [field for field in required_fields if field not in config]
-
+        
         if missing_fields:
             raise ValueError(f"Missing required configuration fields: {', '.join(missing_fields)}")
-
-        # Validate model exists (will be checked in detail during configure)
+            
         if not isinstance(config["model"], str):
             raise ValueError("model must be a string")
-
+            
         return config
 
     def register_actions(self) -> None:
@@ -78,8 +72,8 @@ class EternalAIConnection(BaseConnection):
         if not self._client:
             api_key = os.getenv("EternalAI_API_KEY")
             api_url = os.getenv("EternalAI_API_URL")
-            if not api_key:
-                raise EternalAIConfigurationError("EternalAI API key not found in environment")
+            if not api_key or not api_url:
+                raise EternalAIConfigurationError("EternalAI credentials not found in environment")
             self._client = OpenAI(api_key=api_key, base_url=api_url)
         return self._client
 
@@ -93,8 +87,8 @@ class EternalAIConnection(BaseConnection):
             if response.lower() != 'y':
                 return True
 
-        print("\n📝 To get your EternalAI API credentials:")
-        print("1. Go to https://eternalai.org/api")
+        print("\n📝 To get your EternalAI credentials:")
+        print("1. Visit https://eternalai.org/api")
         print("2. Generate an API Key")
         print("3. Use API url as https://api.eternalai.org/v1/")
 
@@ -109,12 +103,12 @@ class EternalAIConnection(BaseConnection):
             set_key('.env', 'EternalAI_API_KEY', api_key)
             set_key('.env', 'EternalAI_API_URL', api_url)
 
-            # Validate the API key by trying to list models
+            # Validate credentials
             client = OpenAI(api_key=api_key, base_url=api_url)
             client.models.list()
 
             print("\n✅ EternalAI API configuration successfully saved!")
-            print("Your API key has been stored in the .env file.")
+            print("Your credentials have been stored in the .env file.")
             return True
 
         except Exception as e:
@@ -122,7 +116,7 @@ class EternalAIConnection(BaseConnection):
             return False
 
     def is_configured(self, verbose=False) -> bool:
-        """Check if EternalAI API key is configured and valid"""
+        """Check if EternalAI API credentials are configured and valid"""
         try:
             load_dotenv()
             api_key = os.getenv('EternalAI_API_KEY')
@@ -139,20 +133,11 @@ class EternalAIConnection(BaseConnection):
                 logger.debug(f"Configuration check failed: {e}")
             return False
 
-    def generate_text(self, prompt: str, system_prompt: str, model: str = None, chain_id: str = None, **kwargs) -> str:
+    def generate_text(self, prompt: str, system_prompt: str, model: str = None, **kwargs) -> str:
         """Generate text using EternalAI models"""
         try:
             client = self._get_client()
-
-            # Use configured model if none provided
-            if not model:
-                model = self.config["model"]
-            logger.info(f"model {model}")
-            if not chain_id:
-                chain_id = self.config["chain_id"]
-            if not chain_id or chain_id == "":
-                chain_id = "45762"
-            logger.info(f"chain_id {chain_id}")
+            model = model or self.config["model"]
 
             completion = client.chat.completions.create(
                 model=model,
@@ -160,53 +145,47 @@ class EternalAIConnection(BaseConnection):
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt},
                 ],
-                extra_body={"chain_id": chain_id}
             )
-            if completion.choices is None:
-                raise EternalAIAPIError(f"Text generation failed: completion.choices is None")
-            try:
-                if completion.onchain_data is not None:
-                    logger.info(f"response onchain data: {json.dumps(completion.onchain_data, indent=4)}")
-            except:
-                logger.info(f"response onchain data object: {completion.onchain_data}", )
+
             return completion.choices[0].message.content
 
         except Exception as e:
             raise EternalAIAPIError(f"Text generation failed: {e}")
 
-    def check_model(self, model, **kwargs):
+    def check_model(self, model: str, **kwargs) -> bool:
+        """Check if a specific model is available"""
         try:
-            client = self._get_client
+            client = self._get_client()
             try:
                 client.models.retrieve(model=model)
-                # If we get here, the model exists
                 return True
             except Exception:
                 return False
         except Exception as e:
-            raise EternalAIAPIError(e)
+            raise EternalAIAPIError(f"Model check failed: {e}")
 
     def list_models(self, **kwargs) -> None:
         """List all available EternalAI models"""
         try:
             client = self._get_client()
             response = client.models.list().data
-            #
+            
+            # Filter for fine-tuned models
             fine_tuned_models = [
-                model for model in response
+                model for model in response 
                 if model.owned_by in ["organization", "user", "organization-owner"]
             ]
-            #
+            
             if fine_tuned_models:
                 logger.info("\nFINE-TUNED MODELS:")
                 for i, model in enumerate(fine_tuned_models):
-                    logger.info(f"{i + 1}. {model.id}")
-
+                    logger.info(f"{i+1}. {model.id}")
+                    
         except Exception as e:
             raise EternalAIAPIError(f"Listing models failed: {e}")
 
     def perform_action(self, action_name: str, kwargs) -> Any:
-        """Execute a Twitter action with validation"""
+        """Execute an action with validation"""
         if action_name not in self.actions:
             raise KeyError(f"Unknown action: {action_name}")
 
@@ -215,7 +194,6 @@ class EternalAIConnection(BaseConnection):
         if errors:
             raise ValueError(f"Invalid parameters: {', '.join(errors)}")
 
-        # Call the appropriate method based on action name
         method_name = action_name.replace('-', '_')
         method = getattr(self, method_name)
         return method(**kwargs)
