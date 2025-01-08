@@ -10,6 +10,8 @@ from src.helpers import print_h_bar
 from src.action_handler import execute_action
 import src.actions.twitter_actions  
 import src.actions.echochamber_actions  
+from datetime import datetime
+
 
 REQUIRED_FIELDS = ["name", "bio", "traits", "examples", "loop_delay", "config", "tasks"]
 
@@ -35,6 +37,8 @@ class ZerePyAgent:
             self.example_accounts = agent_dict["example_accounts"]
             self.loop_delay = agent_dict["loop_delay"]
             self.connection_manager = ConnectionManager(agent_dict["config"])
+            self.use_time_based_weights = agent_dict["use_time_based_weights"]
+            self.time_based_multipliers = agent_dict["time_based_multipliers"]
 
             has_twitter_tasks = any("tweet" in task["name"] for task in agent_dict.get("tasks", []))
             
@@ -108,6 +112,27 @@ class ZerePyAgent:
             self._system_prompt = "\n".join(prompt_parts)
 
         return self._system_prompt
+    
+    def _adjust_weights_for_time(self, current_hour: int, task_weights: list) -> list:
+        weights = task_weights.copy()
+        
+        # Reduce tweet frequency during night hours (1 AM - 5 AM)
+        if 1 <= current_hour <= 5:
+            weights = [
+                weight * self.time_based_multipliers.get("tweet_night_multiplier", 0.4) if task["name"] == "post-tweet"
+                else weight
+                for weight, task in zip(weights, self.tasks)
+            ]
+            
+        # Increase engagement frequency during day hours (8 AM - 8 PM) (peak hours?🤔)
+        if 8 <= current_hour <= 20:
+            weights = [
+                weight * self.time_based_multipliers.get("engagement_day_multiplier", 1.5) if task["name"] in ("reply-to-tweet", "like-tweet")
+                else weight
+                for weight, task in zip(weights, self.tasks)
+            ]
+        
+        return weights
 
     def prompt_llm(self, prompt: str, system_prompt: str = None) -> str:
         """Generate text using the configured LLM provider"""
@@ -121,6 +146,15 @@ class ZerePyAgent:
 
     def perform_action(self, connection: str, action: str, **kwargs) -> None:
         return self.connection_manager.perform_action(connection, action, **kwargs)
+    
+    def select_action(self, use_time_based_weights: bool = False) -> dict:
+        task_weights = [weight for weight in self.task_weights.copy()]
+        
+        if use_time_based_weights:
+            current_hour = datetime.now().hour
+            task_weights = self._adjust_weights_for_time(current_hour, task_weights)
+        
+        return random.choices(self.tasks, weights=task_weights, k=1)[0]
 
     def loop(self):
         """Main agent loop for autonomous behavior"""
@@ -163,7 +197,8 @@ class ZerePyAgent:
 
                     # CHOOSE AN ACTION
                     # TODO: Add agentic action selection
-                    action = random.choices(self.tasks, weights=self.task_weights, k=1)[0]
+                    
+                    action = self.select_action(use_time_based_weights=self.use_time_based_weights)
                     action_name = action["name"]
 
                     # PERFORM ACTION

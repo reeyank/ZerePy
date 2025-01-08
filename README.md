@@ -176,7 +176,12 @@ Create a new JSON file in the `agents` directory following this structure:
     { "name": "post-tweet", "weight": 1 },
     { "name": "reply-to-tweet", "weight": 1 },
     { "name": "like-tweet", "weight": 1 }
-  ]
+  ],
+  "use_time_based_weights": false,
+  "time_based_multipliers": {
+    "tweet_night_multiplier": 0.4,
+    "engagement_day_multiplier": 1.5
+  }
 }
 ```
 
