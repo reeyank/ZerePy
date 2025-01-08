@@ -1,5 +1,6 @@
 import logging
 import os
+import json
 from typing import Dict, Any
 from dotenv import load_dotenv, set_key
 from openai import OpenAI
@@ -133,11 +134,17 @@ class EternalAIConnection(BaseConnection):
                 logger.debug(f"Configuration check failed: {e}")
             return False
 
-    def generate_text(self, prompt: str, system_prompt: str, model: str = None, **kwargs) -> str:
+    def generate_text(self, prompt: str, system_prompt: str, model: str = None, chain_id: str = None, **kwargs) -> str:
         """Generate text using EternalAI models"""
         try:
             client = self._get_client()
             model = model or self.config["model"]
+            logger.info(f"model {model}")
+
+            chain_id = chain_id or self.config["chain_id"]
+            if not chain_id or chain_id == "":
+                chain_id = "45762"
+            logger.info(f"chain_id {chain_id}")
 
             completion = client.chat.completions.create(
                 model=model,
@@ -145,8 +152,16 @@ class EternalAIConnection(BaseConnection):
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt},
                 ],
+                extra_body={"chain_id": chain_id}
             )
 
+            if completion.choices is None:
+                raise EternalAIAPIError(f"Text generation failed: completion.choices is None")
+            try:
+                if completion.onchain_data is not None:
+                    logger.info(f"response onchain data: {json.dumps(completion.onchain_data, indent=4)}")
+            except:
+                logger.info(f"response onchain data object: {completion.onchain_data}", )
             return completion.choices[0].message.content
 
         except Exception as e:
