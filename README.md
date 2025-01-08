@@ -7,12 +7,24 @@ similar core functionality as Zerebro. For creative outputs, you'll need to fine
 
 ## Features
 
+### Core Platform
+
 - CLI interface for managing agents
-- Twitter/X integration
-- Farcaster integration
-- Echochambers integration
-- OpenAI/Anthropic/EternalAI LLM support
 - Modular connection system
+
+### Social Platform Integrations
+
+- Twitter/X
+- Farcaster
+- Echochambers
+
+### Language Model Support
+
+- OpenAI
+- Anthropic
+- EternalAI
+- Ollama
+- Hyperbolic
 
 ## Quickstart
 
@@ -37,6 +49,7 @@ API keys:
   - OpenAI: https://platform.openai.com/api-keys
   - Anthropic: https://console.anthropic.com/account/keys
   - EternalAI: https://eternalai.oerg/api
+  - Hyperbolic: https://app.hyperbolic.xyz
 - Social (based on your needs):
   - X API: https://developer.x.com/en/docs/authentication/oauth-1-0a/api-key-and-secret
   - Farcaster: Warpcast recovery phrase
@@ -170,6 +183,20 @@ Create a new JSON file in the `agents` directory following this structure:
     {
       "name": "anthropic",
       "model": "claude-3-5-sonnet-20241022"
+    },
+    {
+      "name": "eternalai",
+      "model": "NousResearch/Hermes-3-Llama-3.1-70B-FP8",
+      "chain_id": "45762"
+    },
+    {
+      "name": "ollama",
+      "base_url": "http://localhost:11434",
+      "model": "llama3.2"
+    },
+    {
+      "name": "hyperbolic",
+      "model": "meta-llama/Meta-Llama-3-70B-Instruct"
     }
   ],
   "tasks": [
