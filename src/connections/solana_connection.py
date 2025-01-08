@@ -15,6 +15,7 @@ from src.helpers.solana.trade import TradeManager
 from src.helpers.solana.token_deploy import TokenDeploymentManager
 from src.helpers.solana.performance import SolanaPerformanceTracker
 from src.helpers.solana.transfer import SolanaTransferHelper
+from src.helpers.solana.read import SolanaReadHelper
 
 
 from dotenv import load_dotenv
@@ -243,37 +244,18 @@ class SolanaConnection(BaseConnection):
 
     def transfer(
         self, to_address: str, amount: float, token_mint: Optional[str] = None
-    ) -> bool:
+    ) -> str:
         logger.info(f"STUB: Transfer {amount} to {to_address}")
-        try:
-            if token_mint:
-                signature = SolanaTransferHelper.transfer_spl_tokens(
-                    self._get_connection_async(),
-                    self._get_wallet(),
-                    to_address,
-                    amount,
-                    token_mint,
-                )
-                token_identifier = str(token_mint)
-            else:
-                signature = SolanaTransferHelper.transfer_native_sol(
-                    self._get_connection_async(), self._get_wallet(), to_address, amount
-                )
-                token_identifier = "SOL"
-            SolanaTransferHelper.confirm_transaction(
-                self._get_connection_async(), signature
-            )
-
-            logger.info(
-                f"\nSuccess!\n\nSignature: {signature}\nFrom Address: {str(self._get_wallet().pubkey())}\nTo Address: {to_address}\nAmount: {amount}\nToken: {token_identifier}"
-            )
-
-            return True
-
-        except Exception as error:
-
-            logger.error(f"Transfer failed: {error}")
-            raise RuntimeError(f"Transfer operation failed: {error}") from error
+        res = SolanaTransferHelper.transfer(
+            self._get_connection_async(),
+            self._get_wallet(),
+            to_address,
+            amount,
+            token_mint,
+        )
+        res = asyncio.run(res)
+        logger.debug(f"Transferred {amount} to {to_address}\nTransaction ID: {res}")
+        return res
 
     # todo: test on mainnet
     def trade(
@@ -282,7 +264,7 @@ class SolanaConnection(BaseConnection):
         input_amount: float,
         input_mint: Optional[str] = TOKENS["USDC"],
         slippage_bps: int = 100,
-    ) -> bool:
+    ) -> str:
         logger.info(f"STUB: Swap {input_amount} for {output_mint}")
         res = TradeManager.trade(
             self._get_connection_async(),
@@ -292,55 +274,46 @@ class SolanaConnection(BaseConnection):
             input_mint,
             slippage_bps,
         )
-        asyncio.run(res)
-        return True
+        res = asyncio.run(res)
+        return res
 
-    def get_balance(self, token_address: Optional[str] = None) -> float:
-        connection = self._get_connection()
-        wallet = self._get_wallet()
-        try:
-            if not token_address:
-                response = connection.get_balance(wallet.pubkey(), commitment=Confirmed)
-                return response.value / LAMPORTS_PER_SOL
-
-            response = connection.get_token_account_balance(
-                token_address, commitment=Confirmed
-            )
-
-            if response.value is None:
-                return None
-
-            return float(response.value.ui_amount)
-
-        except Exception as error:
-            raise Exception(f"Failed to get balance: {str(error)}") from error
+    def get_balance(self, token_address: str = None) -> float:
+        if not token_address:
+            logger.info("STUB: Get SOL balance")
+        else:
+            logger.info(f"STUB: Get balance for {token_address}")
+        res = SolanaReadHelper.get_balance(
+            self._get_connection_async(), self._get_wallet(), token_address
+        )
+        res = asyncio.run(res)
+        return res
 
     # todo: test on mainnet
-    def stake(self, amount: float) -> bool:
+    def stake(self, amount: float) -> str:
         logger.info(f"STUB: Stake {amount} SOL")
         res = StakeManager.stake_with_jup(
             self._get_connection_async(), self._get_wallet(), amount
         )
         res = asyncio.run(res)
-        logger.info(f"Staked {amount} SOL\nTransaction ID: {res}")
-        return True
+        logger.debug(f"Staked {amount} SOL\nTransaction ID: {res}")
+        return res
 
     # todo: test on mainnet
-    def lend_assets(self, amount: float) -> bool:
+    def lend_assets(self, amount: float) -> str:
         logger.info(f"STUB: Lend {amount}")
         res = AssetLender.lend_asset(
             self._get_connection_async(), self._get_wallet(), amount
         )
         res = asyncio.run(res)
-        logger.info(f"Lent {amount} USDC\nTransaction ID: {res}")
-        return True
+        logger.debug(f"Lent {amount} USDC\nTransaction ID: {res}")
+        return res
 
-    def request_faucet(self) -> bool:
+    def request_faucet(self) -> str:
         logger.info("STUB: Requesting faucet funds")
         res = FaucetManager.request_faucet_funds(self)
         res = asyncio.run(res)
-        logger.info(f"Requested faucet funds\nTransaction ID: {res}")
-        return True
+        logger.debug(f"Requested faucet funds\nTransaction ID: {res}")
+        return res
 
     def deploy_token(self, decimals: int = 9) -> str:
         logger.info(f"STUB: Deploy token with {decimals} decimals")
@@ -348,86 +321,23 @@ class SolanaConnection(BaseConnection):
             self._get_connection_async(), self._get_wallet(), decimals
         )
         res = asyncio.run(res)
-        logger.info(
+        logger.debug(
             f"Deployed token with {decimals} decimals\nToken Mint: {res['mint']}"
         )
         return res["mint"]
 
     def fetch_price(self, token_id: str) -> float:
-        url = f"https://api.jup.ag/price/v2?ids={token_id}"
-
-        try:
-            with requests.get(url) as response:
-                response.raise_for_status()
-                data = response.json()
-                price = data.get("data", {}).get(token_id, {}).get("price")
-
-                if not price:
-                    raise Exception("Price data not available for the given token.")
-
-                return str(price)
-        except Exception as e:
-            raise Exception(f"Price fetch failed: {str(e)}")
-        return 1.23
+        return SolanaReadHelper.fetch_price(token_id)
 
     # todo: test on mainnet
     def get_tps(self) -> int:
         return SolanaPerformanceTracker.fetch_current_tps(self)
 
     def get_token_by_ticker(self, ticker: str) -> Dict[str, Any]:
-        try:
-            response = requests.get(
-                f"https://api.dexscreener.com/latest/dex/search?q={ticker}"
-            )
-            response.raise_for_status()
-
-            data = response.json()
-            if not data.get("pairs"):
-                return None
-
-            solana_pairs = [
-                pair for pair in data["pairs"] if pair.get("chainId") == "solana"
-            ]
-            solana_pairs.sort(key=lambda x: x.get("fdv", 0), reverse=True)
-
-            solana_pairs = [
-                pair
-                for pair in solana_pairs
-                if pair.get("baseToken", {}).get("symbol", "").lower() == ticker.lower()
-            ]
-
-            if solana_pairs:
-                return solana_pairs[0].get("baseToken", {}).get("address")
-            return None
-        except Exception as error:
-            logger.error(
-                f"Error fetching token address from DexScreener: {str(error)}",
-                exc_info=True,
-            )
-            return None
+        return SolanaReadHelper.get_token_by_ticker(ticker)
 
     def get_token_by_address(self, mint: str) -> Dict[str, Any]:
-        try:
-            if not mint:
-                raise ValueError("Mint address is required")
-
-            response = requests.get(
-                "https://tokens.jup.ag/tokens?tags=verified",
-                headers={"Content-Type": "application/json"},
-            )
-            response.raise_for_status()
-
-            data = response.json()
-            for token in data:
-                if token.get("address") == str(mint):
-                    return JupiterTokenData(
-                        address=token.get("address"),
-                        symbol=token.get("symbol"),
-                        name=token.get("name"),
-                    )
-            return None
-        except Exception as error:
-            raise Exception(f"Error fetching token data: {str(error)}")
+        return SolanaReadHelper.get_token_by_address(mint)
 
     # todo: test on mainnet
     def launch_pump_token(
@@ -449,7 +359,7 @@ class SolanaConnection(BaseConnection):
             options,
         )
         res = asyncio.run(res)
-        logger.info(
+        logger.debug(
             f"Launched Pump & Fun token {token_ticker}\nToken Mint: {res['mint']}"
         )
         return res

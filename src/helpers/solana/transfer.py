@@ -1,5 +1,5 @@
 import math
-
+from venv import logger
 from src.constants import LAMPORTS_PER_SOL
 
 from solana.rpc.async_api import AsyncClient
@@ -20,7 +20,56 @@ class SolanaTransferHelper:
     """Helper class for Solana token and SOL transfers."""
 
     @staticmethod
-    async def transfer_native_sol(
+    async def transfer(
+        async_client: AsyncClient,
+        wallet: Keypair,
+        to: Pubkey,
+        amount: float,
+        spl_token: Pubkey = None,
+    ) -> str:
+        """
+        Transfer SOL or SPL tokens.
+
+        Args:
+            async_client: Async RPC client instance.
+            wallet: Sender's wallet keypair.
+            to: Recipient's public key.
+            amount: Amount of tokens to transfer.
+            spl_token: SPL token mint address (default: None).
+
+        Returns:
+            Transaction signature.
+        """
+        try:
+            if spl_token:
+                signature = SolanaTransferHelper._transfer_spl_tokens(
+                    async_client,
+                    wallet,
+                    to,
+                    amount,
+                    spl_token,
+                )
+                token_identifier = str(spl_token)
+            else:
+                signature = SolanaTransferHelper.transfer_native_sol(
+                    async_client, wallet, to_address, amount
+                )
+                token_identifier = "SOL"
+            SolanaTransferHelper._confirm_transaction(async_client, signature)
+
+            logger.debug(
+                f"\nSuccess!\n\nSignature: {signature}\nFrom Address: {str(wallet.pubkey())}\nTo Address: {to}\nAmount: {amount}\nToken: {token_identifier}"
+            )
+
+            return signature
+
+        except Exception as error:
+
+            logger.error(f"Transfer failed: {error}")
+            raise RuntimeError(f"Transfer operation failed: {error}") from error
+
+    @staticmethod
+    async def _transfer_native_sol(
         async_client: AsyncClient, wallet: Keypair, to: Pubkey, amount: float
     ) -> str:
         """
@@ -57,7 +106,7 @@ class SolanaTransferHelper:
         return result.value
 
     @staticmethod
-    async def transfer_spl_tokens(
+    async def _transfer_spl_tokens(
         async_client: AsyncClient,
         wallet: Keypair,
         recipient: Pubkey,
@@ -129,6 +178,6 @@ class SolanaTransferHelper:
         return result.value
 
     @staticmethod
-    async def confirm_transaction(async_client: AsyncClient, signature: str) -> None:
+    async def _confirm_transaction(async_client: AsyncClient, signature: str) -> None:
         """Wait for transaction confirmation."""
-        async_client.confirm_transaction(signature, commitment=Confirmed)
+        async_client._confirm_transaction(signature, commitment=Confirmed)
