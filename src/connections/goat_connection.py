@@ -6,7 +6,6 @@ from dataclasses import is_dataclass
 from eth_account import Account
 from pydantic import BaseModel
 from web3 import Web3
-from eth_account.signers.local import LocalAccount
 from dotenv import set_key, load_dotenv
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
 from src.helpers import print_h_bar
@@ -36,9 +35,9 @@ class GoatConnection(BaseConnection):
         self._wallet_client: WalletClientBase | None = None
         self._plugins: Dict[str, PluginBase] = {}
         self._action_registry: Dict[str, ToolBase] = {}
-
-        # This calls validate_config, loads plugins and registers actions
-        super().__init__(config)
+        self._config = self.validate_config(
+            config
+        )  # Store config but don't register actions yet
 
     def _resolve_type(self, raw_value: str, module) -> Any:
         """Resolve a type from a string, either from plugin module or fully qualified path"""
@@ -181,7 +180,7 @@ class GoatConnection(BaseConnection):
             parameters.append(
                 ActionParameter(
                     name=field_name,
-                    required=not is_optional and field.default is None,
+                    required=not is_optional,
                     type=field_type,
                     description=description,
                 )
@@ -229,19 +228,34 @@ class GoatConnection(BaseConnection):
 
             self._load_plugin(plugin_config)
 
-        # required_env_variables = [
-        #     "EVM_PRIVATE_KEY",
-        #     "EVM_PROVIDER_URL",
-        # ]
-        # missing_env_variables = [
-        #     field for field in required_env_variables if not os.getenv(field)
-        # ]
-        # if missing_env_variables:
-        #     raise ValueError(
-        #         f"Missing required environment variables: {', '.join(missing_env_variables)}"
-        #     )
-
         return config
+
+    def _register_actions_with_wallet(self) -> None:
+        """Register actions with the current wallet client"""
+        self.actions = {}  # Clear existing actions
+        self._action_registry = {}  # Clear existing registry
+
+        for plugin_name, plugin_instance in self._plugins.items():
+            plugins_tools: List[ToolBase] = plugin_instance.get_tools(
+                wallet_client=self._wallet_client
+            )
+            for tool in plugins_tools:
+                action_parameters = self._convert_pydantic_to_action_parameters(
+                    tool.parameters
+                )
+
+                tool_name = f"{plugin_name}-{tool.name}"
+
+                self.actions[tool_name] = Action(  # type: ignore
+                    name=tool_name,
+                    description=tool.description,
+                    parameters=action_parameters,
+                )
+                self._action_registry[tool_name] = tool
+
+    def register_actions(self) -> None:
+        """Initial action registration - deferred until wallet is configured"""
+        pass  # We'll register actions after wallet configuration
 
     def _create_wallet(self) -> bool:
         """Create wallet from environment variables"""
@@ -264,6 +278,8 @@ class GoatConnection(BaseConnection):
                 account = Account.from_key(private_key)
                 w3.eth.default_account = account.address
                 self._wallet_client = Web3EVMWalletClient(w3)
+                # Register actions now that we have a wallet
+                self._register_actions_with_wallet()
                 return True
             except Exception as e:
                 logger.error(f"Invalid private key: {str(e)}")
@@ -357,6 +373,9 @@ class GoatConnection(BaseConnection):
             w3.eth.default_account = account.address
             self._wallet_client = Web3EVMWalletClient(w3)
 
+            # Register actions now that we have a wallet
+            self._register_actions_with_wallet()
+
             logger.info("\n✅ GOAT configuration successfully set up!")
             logger.info(
                 "Your RPC URL and private key have been stored in the .env file."
@@ -370,31 +389,6 @@ class GoatConnection(BaseConnection):
             logger.error(error_msg)
             raise GoatConfigurationError(error_msg)
 
-    def register_actions(self) -> None:
-        """Register available actions across loaded plugins"""
-        for plugin_instance in self._plugins.values():
-            plugins_tools: List[ToolBase] = plugin_instance.get_tools(
-                wallet_client=self._wallet_client
-            )
-            for tool in plugins_tools:
-                action_parameters = self._convert_pydantic_to_action_parameters(
-                    tool.parameters
-                )
-
-                tool_name = f"{plugin_instance.name}-{tool.name}"
-
-                if self.actions.get(tool_name):
-                    logger.warning(
-                        f"Action {tool_name} is provided by multiple plugins!"
-                    )
-
-                self.actions[tool_name] = Action(  # type: ignore
-                    name=tool_name,
-                    description=tool.description,
-                    parameters=action_parameters,
-                )
-                self._action_registry[tool_name] = tool
-
     def perform_action(self, action_name: str, **kwargs) -> Any:
         """Execute a GOAT action using a plugin's tool"""
         action = self.actions.get(action_name)
@@ -402,7 +396,7 @@ class GoatConnection(BaseConnection):
             raise KeyError(f"Unknown action: {action_name}")
 
         # Validate parameters
-        if hasattr(action, "validate_params"):
+        if isinstance(action, Action):  # Ensure we have an Action instance
             errors = action.validate_params(kwargs)
             if errors:
                 raise ValueError(f"Invalid parameters: {', '.join(errors)}")
