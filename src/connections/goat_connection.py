@@ -9,7 +9,7 @@ from web3 import Web3
 from dotenv import set_key, load_dotenv
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
 from src.helpers import print_h_bar
-from goat import PluginBase, ToolBase, WalletClientBase
+from goat import PluginBase, ToolBase, WalletClientBase, get_tools
 from goat_wallets.web3 import Web3EVMWalletClient
 
 logger = logging.getLogger("connections.goat_connection")
@@ -235,23 +235,19 @@ class GoatConnection(BaseConnection):
         self.actions = {}  # Clear existing actions
         self._action_registry = {}  # Clear existing registry
 
-        for plugin_name, plugin_instance in self._plugins.items():
-            plugins_tools: List[ToolBase] = plugin_instance.get_tools(
-                wallet_client=self._wallet_client
+        tools = get_tools(self._wallet_client, list(self._plugins.values()))  # type: ignore
+
+        for tool in tools:
+            action_parameters = self._convert_pydantic_to_action_parameters(
+                tool.parameters
             )
-            for tool in plugins_tools:
-                action_parameters = self._convert_pydantic_to_action_parameters(
-                    tool.parameters
-                )
 
-                tool_name = f"{plugin_name}-{tool.name}"
-
-                self.actions[tool_name] = Action(  # type: ignore
-                    name=tool_name,
-                    description=tool.description,
-                    parameters=action_parameters,
-                )
-                self._action_registry[tool_name] = tool
+            self.actions[tool.name] = Action(  # type: ignore
+                name=tool.name,
+                description=tool.description,
+                parameters=action_parameters,
+            )
+            self._action_registry[tool.name] = tool
 
     def register_actions(self) -> None:
         """Initial action registration - deferred until wallet is configured"""
