@@ -128,22 +128,25 @@ class ConnectionManager:
                 
             action = connection.actions[action_name]
             
-            # Count required parameters
-            required_params_count = sum(1 for param in action.parameters if param.required)
-            
-            # Check if we have enough parameters
-            if len(params) != required_params_count:
-                param_names = [param.name for param in action.parameters if param.required]
-                logging.error(f"\nError: Expected {required_params_count} required parameters for {action_name}: {', '.join(param_names)}")
-                return None
-            
-            # Convert list of params to kwargs dictionary
+            # Convert list of params to kwargs dictionary, handling both required and optional params
             kwargs = {}
             param_index = 0
-            for param in action.parameters:
-                if param.required:
+            
+            # Add provided parameters up to the number provided
+            for i, param in enumerate(action.parameters):
+                if param_index < len(params):
                     kwargs[param.name] = params[param_index]
                     param_index += 1
+            
+            # Validate all required parameters are present
+            missing_required = [
+                param.name for param in action.parameters 
+                if param.required and param.name not in kwargs
+            ]
+            
+            if missing_required:
+                logging.error(f"\nError: Missing required parameters: {', '.join(missing_required)}")
+                return None
             
             return connection.perform_action(action_name, kwargs)
             
