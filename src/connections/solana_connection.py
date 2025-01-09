@@ -321,15 +321,16 @@ class SolanaConnection(BaseConnection):
         return res
 
     def deploy_token(self, decimals: int = 9) -> str:
-        logger.info(f"STUB: Deploy token with {decimals} decimals")
-        res = TokenDeploymentManager.deploy_token(
-            self._get_connection_async(), self._get_wallet(), decimals
-        )
-        res = asyncio.run(res)
-        logger.debug(
-            f"Deployed token with {decimals} decimals\nToken Mint: {res['mint']}"
-        )
-        return res["mint"]
+        return "Not implemented"
+        # logger.info(f"STUB: Deploy token with {decimals} decimals")
+        # res = TokenDeploymentManager.deploy_token(
+        #     self._get_connection_async(), self._get_wallet(), decimals
+        # )
+        # res = asyncio.run(res)
+        # logger.debug(
+        #     f"Deployed token with {decimals} decimals\nToken Mint: {res['mint']}"
+        # )
+        # return res["mint"]
 
     def fetch_price(self, token_id: str) -> float:
         return SolanaReadHelper.fetch_price(token_id)
