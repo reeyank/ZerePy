@@ -15,6 +15,9 @@
     "This is an example tweet.",
     "This is another example tweet."
   ],
+  "example_accounts": [
+    "0xzerebro"
+  ],
   "loop_delay": 900,
   "config": [
     {
@@ -39,11 +42,30 @@
     {
       "name": "solana",
       "rpc": "https://api.mainnet-beta.solana.com"
+    },
+    {
+      "name": "eternalai",
+      "model": "NousResearch/Hermes-3-Llama-3.1-70B-FP8",
+      "chain_id": "45762"
+    },
+    {
+      "name": "ollama",
+      "base_url": "http://localhost:11434",
+      "model": "llama3.2"
+    },
+    {
+      "name": "hyperbolic",
+      "model": "meta-llama/Meta-Llama-3-70B-Instruct"
     }
   ],
   "tasks": [
     {"name": "post-tweet", "weight": 1},
     {"name": "reply-to-tweet", "weight": 1},
     {"name": "like-tweet", "weight": 1}
-  ]
+  ],
+  "use_time_based_weights": false,
+  "time_based_multipliers": {
+    "tweet_night_multiplier": 0.4,
+    "engagement_day_multiplier": 1.5
+  }
 }
