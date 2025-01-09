@@ -391,11 +391,5 @@ class GoatConnection(BaseConnection):
         if not action:
             raise KeyError(f"Unknown action: {action_name}")
 
-        # Validate parameters
-        if isinstance(action, Action):  # Ensure we have an Action instance
-            errors = action.validate_params(kwargs)
-            if errors:
-                raise ValueError(f"Invalid parameters: {', '.join(errors)}")
-
         tool = self._action_registry[action_name]
         return tool.execute(kwargs)
