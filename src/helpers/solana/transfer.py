@@ -1,6 +1,6 @@
 import math
 from venv import logger
-from src.constants import LAMPORTS_PER_SOL
+from src.constants import LAMPORTS_PER_SOL, SOL_FEES
 
 from solana.rpc.async_api import AsyncClient
 from solana.rpc.commitment import Confirmed
@@ -101,7 +101,7 @@ class SolanaTransferHelper:
             TransferParams(
                 from_pubkey=sender.pubkey(),
                 to_pubkey=receiver,
-                lamports=LAMPORTS_PER_SOL,
+                lamports=SOL_FEES,
             )
         )
         blockhash = (await async_client.get_latest_blockhash()).value.blockhash
