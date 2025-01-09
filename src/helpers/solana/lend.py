@@ -49,6 +49,7 @@ class AssetLender:
             logger.debug(
                 f"Transaction sent: https://explorer.solana.com/tx/{transaction_id}"
             )
+            await session.close()
             return str(signature)
 
         except Exception as e:

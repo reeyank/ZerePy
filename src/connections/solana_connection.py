@@ -304,13 +304,14 @@ class SolanaConnection(BaseConnection):
 
     # todo: test on mainnet
     def lend_assets(self, amount: float) -> str:
-        logger.info(f"STUB: Lend {amount}")
-        res = AssetLender.lend_asset(
-            self._get_connection_async(), self._get_wallet(), amount
-        )
-        res = asyncio.run(res)
-        logger.debug(f"Lent {amount} USDC\nTransaction ID: {res}")
-        return res
+        return "Not implemented"
+        # logger.info(f"STUB: Lend {amount}")
+        # res = AssetLender.lend_asset(
+        #     self._get_connection_async(), self._get_wallet(), amount
+        # )
+        # res = asyncio.run(res)
+        # logger.debug(f"Lent {amount} USDC\nTransaction ID: {res}")
+        # return res
 
     def request_faucet(self) -> str:
         logger.info("STUB: Requesting faucet funds")
@@ -340,6 +341,7 @@ class SolanaConnection(BaseConnection):
         return res
 
     def get_token_by_ticker(self, ticker: str) -> str:
+        ticker = ticker.upper()
         if ticker in SPL_TOKENS:
             return SPL_TOKENS[ticker]
         return SolanaReadHelper.get_token_by_ticker(ticker)
