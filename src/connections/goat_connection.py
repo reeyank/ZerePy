@@ -1,12 +1,17 @@
 import logging
 import os
 import importlib
-from typing import Dict, Any, List, Type, get_type_hints, Optional, Union
+from typing import Dict, Any, List, Type, get_type_hints, Union
 from dataclasses import is_dataclass
-from pydantic import BaseModel, Field
-
+from eth_account import Account
+from pydantic import BaseModel
+from web3 import Web3
+from eth_account.signers.local import LocalAccount
+from dotenv import set_key, load_dotenv
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
+from src.helpers import print_h_bar
 from goat import PluginBase, ToolBase, WalletClientBase
+from goat_wallets.web3 import Web3EVMWalletClient
 
 logger = logging.getLogger("connections.goat_connection")
 
@@ -25,8 +30,9 @@ class GoatConfigurationError(GoatConnectionError):
 
 class GoatConnection(BaseConnection):
     def __init__(self, config: Dict[str, Any]):
-        logger.info("✨ Initializing Goat adapter")
+        logger.info("🐐 Initializing Goat connection...")
 
+        self._is_configured = False
         self._wallet_client: WalletClientBase | None = None
         self._plugins: Dict[str, PluginBase] = {}
         self._action_registry: Dict[str, ToolBase] = {}
@@ -127,7 +133,7 @@ class GoatConnection(BaseConnection):
             # Initialize the plugin
             plugin_instance: PluginBase = plugin_initializer(options=plugin_options)
             self._plugins[plugin_name] = plugin_instance
-            logger.info(f"✨ Loaded plugin: {plugin_name}")
+            logger.info(f"🐐 Loaded plugin: {plugin_name}")
 
         except ImportError:
             raise GoatConfigurationError(
@@ -184,8 +190,9 @@ class GoatConnection(BaseConnection):
         return parameters
 
     @property
-    def is_llm_provider(self) -> bool:
-        return False
+    def is_llm_provider(self) -> None:
+        """Whether this connection provides LLM capabilities"""
+        return None
 
     def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Validate GOAT configuration"""
@@ -213,8 +220,6 @@ class GoatConnection(BaseConnection):
             for arg_name, arg_value in plugin_config["args"].items():
                 if not isinstance(arg_name, str):
                     raise ValueError(f"Invalid key for {arg_name}: {arg_value}")
-                if not isinstance(arg_value, str):
-                    raise ValueError(f"Invalid value for {arg_name}: {arg_value}")
 
             plugin_name = plugin_config["name"]
             if not plugin_name.isidentifier():
@@ -236,9 +241,134 @@ class GoatConnection(BaseConnection):
         #         f"Missing required environment variables: {', '.join(missing_env_variables)}"
         #     )
 
-        self._is_configured = True
-
         return config
+
+    def _create_wallet(self) -> bool:
+        """Create wallet from environment variables"""
+        try:
+            load_dotenv()
+            rpc_url = os.getenv("GOAT_RPC_PROVIDER_URL")
+            private_key = os.getenv("GOAT_WALLET_PRIVATE_KEY")
+
+            if not rpc_url or not private_key:
+                return False
+
+            # Initialize Web3 and test connection
+            w3 = Web3(Web3.HTTPProvider(rpc_url))
+            if not w3.is_connected():
+                logger.error("Failed to connect to RPC provider")
+                return False
+
+            # Test private key by creating account
+            try:
+                account = Account.from_key(private_key)
+                w3.eth.default_account = account.address
+                self._wallet_client = Web3EVMWalletClient(w3)
+                return True
+            except Exception as e:
+                logger.error(f"Invalid private key: {str(e)}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Failed to create wallet: {str(e)}")
+            return False
+
+    def is_configured(self, verbose: bool = False) -> bool:
+        """Check if the connection is properly configured"""
+        if not self._is_configured:
+            self._is_configured = self._create_wallet()
+
+        if verbose and not self._is_configured:
+            logger.error(
+                "GOAT connection is not configured. Please run configure() first."
+            )
+
+        return self._is_configured
+
+    def configure(self, **kwargs) -> bool:
+        """Sets up GOAT configuration"""
+        logger.info("Starting GOAT configuration setup")
+
+        if self.is_configured(verbose=False):
+            logger.info("GOAT API is already configured")
+            response = input("Do you want to reconfigure? (y/n): ")
+            if response.lower() != "y":
+                return False
+
+        setup_instructions = [
+            "\n🔗 GOAT CONFIGURATION SETUP",
+            "\n📝 You will need:",
+            "1. An RPC provider URL (e.g. from Infura, Alchemy, or your own node)",
+            "2. A wallet private key for signing transactions",
+            "\n⚠️ IMPORTANT: Never share your private key with anyone!",
+        ]
+        logger.info("\n".join(setup_instructions))
+        print_h_bar()
+
+        try:
+            # Get RPC URL and private key
+            logger.info("\nPlease enter your credentials:")
+            rpc_url = input("Enter your RPC provider URL: ")
+            private_key = input(
+                "Enter your wallet private key (will be stored in .env): "
+            )
+
+            # Basic validation
+            if not rpc_url.startswith(("http://", "https://")):
+                raise ValueError(
+                    "Invalid RPC URL format. Must start with http:// or https://"
+                )
+
+            if not private_key.startswith("0x") or len(private_key) != 66:
+                raise ValueError(
+                    "Invalid private key format. Must be a 64-character hex string with '0x' prefix"
+                )
+
+            # Initialize Web3 and test connection
+            w3 = Web3(Web3.HTTPProvider(rpc_url))
+            if not w3.is_connected():
+                raise ConnectionError(
+                    "Failed to connect to RPC provider. Please check your URL."
+                )
+
+            # Test private key by creating account
+            try:
+                account = Account.from_key(private_key)
+                logger.info(f"\nWallet address: {account.address}")
+            except Exception as e:
+                raise ValueError(f"Invalid private key: {str(e)}")
+
+            # Save to .env
+            if not os.path.exists(".env"):
+                logger.debug("Creating new .env file")
+                with open(".env", "w") as f:
+                    f.write("")
+
+            env_vars = {
+                "GOAT_RPC_PROVIDER_URL": rpc_url,
+                "GOAT_WALLET_PRIVATE_KEY": private_key,
+            }
+
+            for key, value in env_vars.items():
+                set_key(".env", key, value)
+                logger.debug(f"Saved {key} to .env")
+
+            # Initialize wallet client
+            w3.eth.default_account = account.address
+            self._wallet_client = Web3EVMWalletClient(w3)
+
+            logger.info("\n✅ GOAT configuration successfully set up!")
+            logger.info(
+                "Your RPC URL and private key have been stored in the .env file."
+            )
+
+            self._is_configured = True
+            return True
+
+        except Exception as e:
+            error_msg = f"Setup failed: {str(e)}"
+            logger.error(error_msg)
+            raise GoatConfigurationError(error_msg)
 
     def register_actions(self) -> None:
         """Register available actions across loaded plugins"""
@@ -265,19 +395,17 @@ class GoatConnection(BaseConnection):
                 )
                 self._action_registry[tool_name] = tool
 
-    def is_configured(self, verbose: bool = False) -> bool:
-        """Check if the connection is properly configured"""
-        return self._is_configured
-
     def perform_action(self, action_name: str, **kwargs) -> Any:
         """Execute a GOAT action using a plugin's tool"""
         action = self.actions.get(action_name)
         if not action:
             raise KeyError(f"Unknown action: {action_name}")
 
-        errors = action.validate_params(kwargs)
-        if errors:
-            raise ValueError(f"Invalid parameters: {', '.join(errors)}")
+        # Validate parameters
+        if hasattr(action, "validate_params"):
+            errors = action.validate_params(kwargs)
+            if errors:
+                raise ValueError(f"Invalid parameters: {', '.join(errors)}")
 
         tool = self._action_registry[action_name]
         return tool.execute(kwargs)
