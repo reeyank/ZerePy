@@ -271,12 +271,18 @@ class ZerePyCLI:
         from difflib import get_close_matches
         return get_close_matches(command, self.commands.keys(), n=max_suggestions, cutoff=0.6)
 
-    def _print_welcome_message(self) -> None:
-        """Print welcome message and initial status"""
+    def _print_welcome_message(self, clearing: bool = False) -> None:
+        """Print welcome message and initial status
+        
+        Args:
+            clearing (bool): Whether this is being called during a screen clear
+                        When True, skips the final horizontal bar to avoid doubles
+        """
         print_h_bar()
         logger.info("👋 Welcome to the ZerePy CLI!")
         logger.info("Type 'help' for a list of commands.")
-        print_h_bar() 
+        if not clearing:
+            print_h_bar()
 
     def _show_command_help(self, command_name: str) -> None:
         """Show help for a specific command"""
@@ -372,9 +378,7 @@ class ZerePyCLI:
     def clear_screen(self, input_list: List[str]) -> None:
         """Clear the terminal screen"""
         os.system('cls' if os.name == 'nt' else 'clear')
-        print_h_bar()
-        logger.info("👋 Welcome to the ZerePy CLI!")
-        logger.info("Type 'help' for a list of commands.")
+        self._print_welcome_message(clearing=True)
 
     def agent_action(self, input_list: List[str]) -> None:
         """Handle agent action command"""
