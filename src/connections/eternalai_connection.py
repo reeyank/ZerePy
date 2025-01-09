@@ -6,7 +6,7 @@ from dotenv import load_dotenv, set_key
 from openai import OpenAI
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("connections.eternalai_connection")
 
 class EternalAIConnectionError(Exception):
     """Base exception for EternalAI connection errors"""
@@ -80,18 +80,18 @@ class EternalAIConnection(BaseConnection):
 
     def configure(self) -> bool:
         """Sets up EternalAI API authentication"""
-        print("\n🤖 EternalAI API SETUP")
+        logger.info("\n🤖 EternalAI API SETUP")
 
         if self.is_configured():
-            print("\nEternalAI API is already configured.")
+            logger.info("\nEternalAI API is already configured.")
             response = input("Do you want to reconfigure? (y/n): ")
             if response.lower() != 'y':
                 return True
 
-        print("\n📝 To get your EternalAI credentials:")
-        print("1. Visit https://eternalai.org/api")
-        print("2. Generate an API Key")
-        print("3. Use API url as https://api.eternalai.org/v1/")
+        logger.info("\n📝 To get your EternalAI credentials:")
+        logger.info("1. Visit https://eternalai.org/api")
+        logger.info("2. Generate an API Key")
+        logger.info("3. Use API url as https://api.eternalai.org/v1/")
 
         api_key = input("\nEnter your EternalAI API key: ")
         api_url = input("\nEnter your EternalAI API url: ")
@@ -108,8 +108,8 @@ class EternalAIConnection(BaseConnection):
             client = OpenAI(api_key=api_key, base_url=api_url)
             client.models.list()
 
-            print("\n✅ EternalAI API configuration successfully saved!")
-            print("Your credentials have been stored in the .env file.")
+            logger.info("\n✅ EternalAI API configuration successfully saved!")
+            logger.info("Your credentials have been stored in the .env file.")
             return True
 
         except Exception as e:

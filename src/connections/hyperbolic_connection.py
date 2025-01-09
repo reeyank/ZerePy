@@ -5,7 +5,7 @@ from dotenv import load_dotenv, set_key
 from openai import OpenAI
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
 
-logger = logging.getLogger("connectinos.hyperbolic_connection")
+logger = logging.getLogger("connections.hyperbolic_connection")
 
 class HyperbolicConnectionError(Exception):
     """Base exception for Hyperbolic connection errors"""
@@ -83,19 +83,19 @@ class HyperbolicConnection(BaseConnection):
 
     def configure(self) -> bool:
         """Sets up Hyperbolic API authentication"""
-        print("\n🤖 HYPERBOLIC API SETUP")
+        logger.info("\n🤖 HYPERBOLIC API SETUP")
 
         if self.is_configured():
-            print("\nHyperbolic API is already configured.")
+            logger.info("\nHyperbolic API is already configured.")
             response = input("Do you want to reconfigure? (y/n): ")
             if response.lower() != 'y':
                 return True
 
-        print("\n📝 To get your Hyperbolic API credentials:")
-        print("1. Go to https://app.hyperbolic.xyz")
-        print("2. Log in with your method of choice")
-        print("3. Verify your email address")
-        print("4. Generate an API key")
+        logger.info("\n📝 To get your Hyperbolic API credentials:")
+        logger.info("1. Go to https://app.hyperbolic.xyz")
+        logger.info("2. Log in with your method of choice")
+        logger.info("3. Verify your email address")
+        logger.info("4. Generate an API key")
         
         api_key = input("\nEnter your Hyperbolic API key: ")
 
@@ -113,8 +113,8 @@ class HyperbolicConnection(BaseConnection):
             )
             client.models.list()
 
-            print("\n✅ Hyperbolic API configuration successfully saved!")
-            print("Your API key has been stored in the .env file.")
+            logger.info("\n✅ Hyperbolic API configuration successfully saved!")
+            logger.info("Your API key has been stored in the .env file.")
             return True
 
         except Exception as e:
