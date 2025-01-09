@@ -108,7 +108,7 @@ class SolanaConnection(BaseConnection):
         if not isinstance(config["rpc"], str):
             raise ValueError("rpc must be a positive integer")
 
-        return config  # For stub, accept any config
+        return config
 
     def register_actions(self) -> None:
         """Register available Solana actions"""
@@ -286,7 +286,6 @@ class SolanaConnection(BaseConnection):
     def transfer(
         self, to_address: str, amount: float, token_mint: Optional[str] = None
     ) -> str:
-        logger.info(f"STUB: Transfer {amount} to {to_address}")
         res = SolanaTransferHelper.transfer(
             self._get_connection_async(),
             self._get_wallet(),
@@ -306,7 +305,7 @@ class SolanaConnection(BaseConnection):
         input_mint: Optional[str] = SPL_TOKENS["USDC"],
         slippage_bps: int = 100,
     ) -> str:
-        logger.info(f"STUB: Swap {input_amount} for {output_mint}")
+        logger.info(f"Swapping {input_amount} for {output_mint}")
         wallet = self._get_wallet()
         async_client = self._get_connection_async()
         jupiter = self._get_jupiter(wallet, async_client)
@@ -324,18 +323,17 @@ class SolanaConnection(BaseConnection):
 
     def get_balance(self, token_address: str = None) -> float:
         if not token_address:
-            logger.info("STUB: Get SOL balance")
+            logger.info("Getting SOL balance")
         else:
-            logger.info(f"STUB: Get balance for {token_address}")
+            logger.info(f"Getting balance for {token_address}")
         res = SolanaReadHelper.get_balance(
             self._get_connection_async(), self._get_wallet(), token_address
         )
         res = asyncio.run(res)
         return res
 
-    # todo: test on mainnet
     def stake(self, amount: float) -> str:
-        logger.info(f"STUB: Stake {amount} SOL")
+        logger.info(f"Staking {amount} SOL")
         res = StakeManager.stake_with_jup(
             self._get_connection_async(), self._get_wallet(), amount
         )
@@ -355,7 +353,7 @@ class SolanaConnection(BaseConnection):
         # return res
 
     def request_faucet(self) -> str:
-        logger.info("STUB: Requesting faucet funds")
+        logger.info("Requesting faucet funds")
         res = FaucetManager.request_faucet_funds(self)
         res = asyncio.run(res)
         logger.debug(f"Requested faucet funds\nTransaction ID: {res}")

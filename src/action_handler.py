@@ -1,6 +1,6 @@
 import logging
 
-logger = logging.getLogger("agent")
+logger = logging.getLogger("action_handler")
 
 action_registry = {}    
 
