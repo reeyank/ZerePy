@@ -8,8 +8,12 @@ from src.constants import LAMPORTS_PER_SOL
 from src.types import JupiterTokenData
 
 from solders.keypair import Keypair  # type: ignore
-
+from solders.pubkey import Pubkey  # type: ignore
 import requests
+
+from spl.token.async_client import AsyncToken
+from spl.token.instructions import get_associated_token_address
+from spl.token.constants import TOKEN_PROGRAM_ID
 
 
 class SolanaReadHelper:
@@ -19,21 +23,32 @@ class SolanaReadHelper:
         wallet: Keypair,
         token_address: str = None,
     ) -> int:
+        logger.debug(
+            f"Getting balance for {wallet.pubkey()}\ntoken_address: {token_address}"
+        )
         try:
             if not token_address:
                 response = await async_client.get_balance(
                     wallet.pubkey(), commitment=Confirmed
                 )
                 return response.value / LAMPORTS_PER_SOL
-
-            response = await async_client.get_token_account_balance(
-                token_address, commitment=Confirmed
+            token_address = Pubkey.from_string(token_address)
+            spl_client = AsyncToken(
+                async_client, token_address, TOKEN_PROGRAM_ID, wallet.pubkey()
             )
 
+            mint = await spl_client.get_mint_info()
+            if not mint.is_initialized:
+                raise ValueError("Token mint is not initialized.")
+
+            wallet_ata = get_associated_token_address(wallet.pubkey(), token_address)
+            response = await async_client.get_token_account_balance(wallet_ata)
             if response.value is None:
                 return None
+            response = response.value.ui_amount
+            logger.debug(f"Balance response: {response}")
 
-            return float(response.value.ui_amount)
+            return float(response)
 
         except Exception as error:
             raise Exception(f"Failed to get balance: {str(error)}") from error

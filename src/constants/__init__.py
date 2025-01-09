@@ -2,7 +2,7 @@ from solders.pubkey import Pubkey  # type: ignore
 
 # Common token addresses used across the toolkit
 TOKENS = {
-    "USDC": Pubkey.from_string("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"),  
+    "USDC": Pubkey.from_string("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"),
     "USDT": Pubkey.from_string("Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"),
     "USDS": Pubkey.from_string("USDSwr9ApdHk5bvJKMjzff41FfuX8bSxdKcR81vTwcA"),
     "SOL": Pubkey.from_string("So11111111111111111111111111111111111111112"),
@@ -19,4 +19,4 @@ DEFAULT_OPTIONS = {
 
 JUP_API = "https://quote-api.jup.ag/v6"
 
-LAMPORTS_PER_SOL = 1_000_000_000
+LAMPORTS_PER_SOL = 100_000_000

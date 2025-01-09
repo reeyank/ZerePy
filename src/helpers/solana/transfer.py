@@ -25,7 +25,7 @@ class SolanaTransferHelper:
         wallet: Keypair,
         to: Pubkey,
         amount: float,
-        spl_token: Pubkey = None,
+        spl_token: str = None,
     ) -> str:
         """
         Transfer SOL or SPL tokens.
@@ -42,20 +42,20 @@ class SolanaTransferHelper:
         """
         try:
             if spl_token:
-                signature = SolanaTransferHelper._transfer_spl_tokens(
+                signature = await SolanaTransferHelper._transfer_spl_tokens(
                     async_client,
                     wallet,
                     to,
+                    Pubkey.from_string(spl_token),
                     amount,
-                    spl_token,
                 )
                 token_identifier = str(spl_token)
             else:
-                signature = SolanaTransferHelper.transfer_native_sol(
-                    async_client, wallet, to_address, amount
+                signature = await SolanaTransferHelper._transfer_native_sol(
+                    async_client, wallet, to, amount
                 )
                 token_identifier = "SOL"
-            SolanaTransferHelper._confirm_transaction(async_client, signature)
+            await SolanaTransferHelper._confirm_transaction(async_client, signature)
 
             logger.debug(
                 f"\nSuccess!\n\nSignature: {signature}\nFrom Address: {str(wallet.pubkey())}\nTo Address: {to}\nAmount: {amount}\nToken: {token_identifier}"
@@ -92,7 +92,7 @@ class SolanaTransferHelper:
                 lamports=LAMPORTS_PER_SOL,
             )
         )
-        blockhash = await async_client.get_latest_blockhash().value.blockhash
+        blockhash = (await async_client.get_latest_blockhash()).value.blockhash
         msg = MessageV0.try_compile(
             payer=sender.pubkey(),
             instructions=[ix],
@@ -127,22 +127,29 @@ class SolanaTransferHelper:
             Transaction signature.
         """
         sender = wallet
+        logger.debug("\nhere1\n")
+
         spl_client = AsyncToken(
             async_client, spl_token, TOKEN_PROGRAM_ID, sender.pubkey()
         )
+        logger.debug("\nhere2\n")
 
         mint = await spl_client.get_mint_info()
         if not mint.is_initialized:
             raise ValueError("Token mint is not initialized.")
+        logger.debug("\nhere3\n")
 
         token_decimals = mint.decimals
         if amount < 10**-token_decimals:
             raise ValueError("Invalid amount of decimals for the token.")
+        logger.debug("\nhere4\n")
 
         tokens = math.floor(amount * (10**token_decimals))
+        logger.debug("\nhere5\n")
 
         payer_ata = get_associated_token_address(sender.pubkey(), spl_token)
         recipient_ata = get_associated_token_address(recipient, spl_token)
+        logger.debug("\nhere6\n")
 
         payer_account_info = await spl_client.get_account_info(payer_ata)
         if not payer_account_info.is_initialized:
@@ -163,8 +170,8 @@ class SolanaTransferHelper:
             dest=recipient_ata,
             mint=spl_token,
         )
-
-        blockhash = (await async_client.get_latest_blockhash()).value.blockhash
+        task = await async_client.get_latest_blockhash()
+        blockhash = task.value.blockhash
         msg = MessageV0.try_compile(
             payer=sender.pubkey(),
             instructions=[transfer_instruction],
@@ -180,4 +187,4 @@ class SolanaTransferHelper:
     @staticmethod
     async def _confirm_transaction(async_client: AsyncClient, signature: str) -> None:
         """Wait for transaction confirmation."""
-        async_client._confirm_transaction(signature, commitment=Confirmed)
+        async_client.confirm_transaction(signature, commitment=Confirmed)

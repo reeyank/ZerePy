@@ -38,7 +38,7 @@
     },
     {
       "name": "solana",
-      "rpc": "http://127.0.0.1:8899"
+      "rpc": "https://api.mainnet-beta.solana.com"
     }
   ],
   "tasks": [
