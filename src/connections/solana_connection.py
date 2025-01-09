@@ -18,7 +18,7 @@ from src.helpers.solana.transfer import SolanaTransferHelper
 from src.helpers.solana.read import SolanaReadHelper
 
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv, set_key
 
 from jupiter_python_sdk.jupiter import Jupiter
 
@@ -218,17 +218,59 @@ class SolanaConnection(BaseConnection):
             ),
         }
 
-    # todo w
     def configure(self) -> bool:
-        """Stub configuration"""
-        return True
+        """Sets up Solana credentials"""
+        logger.info("\n🔑 SOLANA CREDENTIALS SETUP")
 
-    def is_configured(self, verbose: bool = True) -> bool:
-        """Stub configuration check"""
+        if self.is_configured():
+            logger.info("\nSolana is already configured.")
+            response = input("Do you want to reconfigure? (y/n): ")
+            if response.lower() != "y":
+                return True
+
+        logger.info("\n📝 To get your Solana private key:")
+        logger.info("1. Export your private key from your wallet")
+        logger.info("2. Make sure it's in base58 format")
+        logger.info("3. Never share this key with anyone")
+
+        private_key = input("\nEnter your Solana private key: ")
+
         try:
+            # Validate the private key format by attempting to create a keypair
+            Keypair.from_base58_string(private_key)
 
-            credentials = self._get_credentials()
-            logger.debug("Solana configuration is valid")
+            if not os.path.exists(".env"):
+                with open(".env", "w") as f:
+                    f.write("")
+
+            set_key(".env", "SOLANA_PRIVATE_KEY", private_key)
+            load_dotenv(override=True)
+
+            logger.info("\n✅ Solana configuration successfully saved!")
+            logger.info("Your private key has been stored in the .env file.")
+            return True
+
+        except Exception as e:
+            logger.error(f"\n❌ Configuration failed: {e}")
+            return False
+
+    def is_configured(self, verbose: bool = False) -> bool:
+        """Check if Solana credentials are configured and valid"""
+        try:
+            # First check if credentials exist and key is valid
+            load_dotenv(override=True)
+            private_key = os.getenv("SOLANA_PRIVATE_KEY")
+            if not private_key:
+                if verbose:
+                    logger.debug("Solana private key not found in environment")
+                return False
+
+            # Validate the key format
+            Keypair.from_base58_string(private_key)
+
+            # We successfully validated the private key exists and is in correct format
+            if verbose:
+                logger.debug("Solana configuration is valid")
             return True
 
         except Exception as e:
@@ -240,7 +282,6 @@ class SolanaConnection(BaseConnection):
                     error_msg = f"API validation error: {error_msg}"
                 logger.debug(f"Solana Configuration validation failed: {error_msg}")
             return False
-        return True
 
     def transfer(
         self, to_address: str, amount: float, token_mint: Optional[str] = None
