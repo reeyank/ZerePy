@@ -13,6 +13,9 @@ from solders.keypair import Keypair  # type: ignore
 from solders.pubkey import Pubkey  # type: ignore
 from solders.transaction import VersionedTransaction  # type: ignore
 
+from spl.token.async_client import AsyncToken
+from spl.token.constants import TOKEN_PROGRAM_ID
+
 from src.constants import DEFAULT_OPTIONS
 
 
@@ -22,9 +25,9 @@ class TradeManager:
         async_client: AsyncClient,
         wallet: Keypair,
         jupiter: Jupiter,
-        output_mint: Pubkey,
+        output_mint: str,
         input_amount: float,
-        input_mint: Pubkey,
+        input_mint: str,
         slippage_bps: int,
     ) -> str:
         """
@@ -46,7 +49,12 @@ class TradeManager:
         # convert wallet.secret() from bytes to string
         input_mint = str(input_mint)
         output_mint = str(output_mint)
-        input_amount: int = int(input_amount * 10 ** DEFAULT_OPTIONS["TOKEN_DECIMALS"])
+        spl_client = AsyncToken(
+            async_client, Pubkey.from_string(input_mint), TOKEN_PROGRAM_ID, wallet
+        )
+        mint = await spl_client.get_mint_info()
+        decimals = mint.decimals
+        input_amount = int(input_amount * 10**decimals)
 
         try:
             transaction_data = await jupiter.swap(

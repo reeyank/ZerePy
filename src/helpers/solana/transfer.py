@@ -23,7 +23,7 @@ from spl.token.instructions import (
     TransferCheckedParams,
 )
 from spl.token.constants import TOKEN_PROGRAM_ID
-from solders.compute_budget import set_compute_unit_limit, set_compute_unit_price
+from solders.compute_budget import set_compute_unit_limit, set_compute_unit_price  # type: ignore
 import asyncio
 
 

@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional
 
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
 from src.types import JupiterTokenData
-from src.constants import LAMPORTS_PER_SOL, TOKENS
+from src.constants import LAMPORTS_PER_SOL, SPL_TOKENS
 from src.helpers.solana.pumpfun import PumpfunTokenManager
 from src.helpers.solana.faucet import FaucetManager
 from src.helpers.solana.lend import AssetLender
@@ -82,10 +82,10 @@ class SolanaConnection(BaseConnection):
         logger.debug("All required credentials found")
         return credentials
 
-    def _get_jupiter(self, private_key, async_client):
+    def _get_jupiter(self, keypair, async_client):
         jupiter = Jupiter(
             async_client=async_client,
-            keypair=private_key,
+            keypair=keypair,
             quote_api_url="https://quote-api.jup.ag/v6/quote?",
             swap_api_url="https://quote-api.jup.ag/v6/swap",
             open_order_api_url="https://jup.ag/api/limit/v1/createOrder",
@@ -262,13 +262,17 @@ class SolanaConnection(BaseConnection):
         self,
         output_mint: str,
         input_amount: float,
-        input_mint: Optional[str] = TOKENS["USDC"],
+        input_mint: Optional[str] = SPL_TOKENS["USDC"],
         slippage_bps: int = 100,
     ) -> str:
         logger.info(f"STUB: Swap {input_amount} for {output_mint}")
+        wallet = self._get_wallet()
+        async_client = self._get_connection_async()
+        jupiter = self._get_jupiter(wallet, async_client)
         res = TradeManager.trade(
-            self._get_connection_async(),
-            self._get_wallet(),
+            async_client,
+            wallet,
+            jupiter,
             output_mint,
             input_amount,
             input_mint,
@@ -333,7 +337,9 @@ class SolanaConnection(BaseConnection):
     def get_tps(self) -> int:
         return SolanaPerformanceTracker.fetch_current_tps(self)
 
-    def get_token_by_ticker(self, ticker: str) -> Dict[str, Any]:
+    def get_token_by_ticker(self, ticker: str) -> str:
+        if ticker in SPL_TOKENS:
+            return SPL_TOKENS[ticker]
         return SolanaReadHelper.get_token_by_ticker(ticker)
 
     def get_token_by_address(self, mint: str) -> Dict[str, Any]:
