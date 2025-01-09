@@ -17,6 +17,7 @@ from spl.token.async_client import AsyncToken
 from spl.token.constants import TOKEN_PROGRAM_ID
 
 from src.constants import DEFAULT_OPTIONS
+from src.helpers.solana.transfer import SolanaTransferHelper
 
 
 class TradeManager:
@@ -61,6 +62,7 @@ class TradeManager:
                 input_mint,
                 output_mint,
                 input_amount,
+                only_direct_routes=False,
                 slippage_bps=slippage_bps,
             )
             raw_transaction = VersionedTransaction.from_bytes(
@@ -76,10 +78,12 @@ class TradeManager:
             result = await async_client.send_raw_transaction(
                 txn=bytes(signed_txn), opts=opts
             )
+            logger.debug(f"Transaction sent: {json.loads(result.to_json())}")
             transaction_id = json.loads(result.to_json())["result"]
             logger.debug(
                 f"Transaction sent: https://explorer.solana.com/tx/{transaction_id}"
             )
+            await SolanaTransferHelper._confirm_transaction(async_client, signature)
             return str(signature)
 
         except Exception as e:

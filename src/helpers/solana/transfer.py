@@ -198,4 +198,4 @@ class SolanaTransferHelper:
     @staticmethod
     async def _confirm_transaction(async_client: AsyncClient, signature: str) -> None:
         """Wait for transaction confirmation."""
-        async_client.confirm_transaction(signature, commitment=Confirmed)
+        await async_client.confirm_transaction(signature, commitment=Confirmed)
