@@ -14,6 +14,17 @@ from solders.message import MessageV0  # type: ignore
 from spl.token.async_client import AsyncToken
 from spl.token.constants import TOKEN_PROGRAM_ID
 from spl.token.instructions import get_associated_token_address, transfer_checked
+from spl.token.instructions import TransferCheckedParams
+from solana.rpc.async_api import AsyncClient
+from solana.transaction import Transaction
+from spl.token.instructions import (
+    get_associated_token_address,
+    transfer_checked,
+    TransferCheckedParams,
+)
+from spl.token.constants import TOKEN_PROGRAM_ID
+from solders.compute_budget import set_compute_unit_limit, set_compute_unit_price
+import asyncio
 
 
 class SolanaTransferHelper:
@@ -23,7 +34,7 @@ class SolanaTransferHelper:
     async def transfer(
         async_client: AsyncClient,
         wallet: Keypair,
-        to: Pubkey,
+        to: str,
         amount: float,
         spl_token: str = None,
     ) -> str:
@@ -40,6 +51,7 @@ class SolanaTransferHelper:
         Returns:
             Transaction signature.
         """
+        to = Pubkey.from_string(to)
         try:
             if spl_token:
                 signature = await SolanaTransferHelper._transfer_spl_tokens(
@@ -126,59 +138,58 @@ class SolanaTransferHelper:
         Returns:
             Transaction signature.
         """
-        sender = wallet
-        logger.debug("\nhere1\n")
 
+        compute_unit_limit = 10_000
+        compute_unit_price = 1_000_000
+        connection = async_client
+        keypair = wallet
+        token_mint = spl_token
         spl_client = AsyncToken(
-            async_client, spl_token, TOKEN_PROGRAM_ID, sender.pubkey()
+            connection, spl_token, TOKEN_PROGRAM_ID, keypair.pubkey()
         )
-        logger.debug("\nhere2\n")
-
         mint = await spl_client.get_mint_info()
-        if not mint.is_initialized:
-            raise ValueError("Token mint is not initialized.")
-        logger.debug("\nhere3\n")
+        decimals = mint.decimals
+        amount = math.floor(amount * 10**decimals)
+        sender_token_address = get_associated_token_address(keypair.pubkey(), spl_token)
+        recipient_token_address = get_associated_token_address(recipient, spl_token)
+        blockhash_resp = await connection.get_latest_blockhash()
+        recent_blockhash = blockhash_resp.value.blockhash
 
-        token_decimals = mint.decimals
-        if amount < 10**-token_decimals:
-            raise ValueError("Invalid amount of decimals for the token.")
-        logger.debug("\nhere4\n")
+        ixs = []
+        # if compute_unit_limit > 0:
+        #    ixs.append(set_compute_unit_limit(compute_unit_limit))
+        # if compute_unit_price > 0:
+        #    ixs.append(set_compute_unit_price(compute_unit_price))
+        # log all transfer params
+        logger.debug(f"\nAmount: {amount}")
+        logger.debug(f"\nSender Token Address: {sender_token_address}")
+        logger.debug(f"\nRecipient Token Address: {recipient_token_address}")
+        logger.debug(f"\nOwner: {keypair.pubkey()}")
+        logger.debug(f"\nMint: {token_mint}")
+        logger.debug(f"\nDecimals: {decimals}")
+        logger.debug(f"\nProgram ID: {TOKEN_PROGRAM_ID}")
 
-        tokens = math.floor(amount * (10**token_decimals))
-        logger.debug("\nhere5\n")
-
-        payer_ata = get_associated_token_address(sender.pubkey(), spl_token)
-        recipient_ata = get_associated_token_address(recipient, spl_token)
-        logger.debug("\nhere6\n")
-
-        payer_account_info = await spl_client.get_account_info(payer_ata)
-        if not payer_account_info.is_initialized:
-            raise ValueError("Payer's associated token account is not initialized.")
-        if tokens > payer_account_info.amount:
-            raise ValueError("Insufficient funds in payer's token account.")
-
-        recipient_account_info = await spl_client.get_account_info(recipient_ata)
-        if not recipient_account_info.is_initialized:
-            raise ValueError("Recipient's associated token account is not initialized.")
-
-        transfer_instruction = transfer_checked(
-            amount=tokens,
-            decimals=token_decimals,
-            program_id=TOKEN_PROGRAM_ID,
-            owner=sender.pubkey(),
-            source=payer_ata,
-            dest=recipient_ata,
-            mint=spl_token,
+        ixs.append(
+            transfer_checked(
+                TransferCheckedParams(
+                    source=sender_token_address,
+                    dest=recipient_token_address,
+                    owner=keypair.pubkey(),
+                    mint=token_mint,
+                    amount=amount,
+                    decimals=decimals,
+                    program_id=TOKEN_PROGRAM_ID,
+                )
+            )
         )
-        task = await async_client.get_latest_blockhash()
-        blockhash = task.value.blockhash
+        blockhash = (await async_client.get_latest_blockhash()).value.blockhash
         msg = MessageV0.try_compile(
-            payer=sender.pubkey(),
-            instructions=[transfer_instruction],
+            payer=wallet.pubkey(),
+            instructions=ixs,
             address_lookup_table_accounts=[],
             recent_blockhash=blockhash,
         )
-        tx = VersionedTransaction(msg, [sender])
+        tx = VersionedTransaction(msg, [wallet])
 
         result = await async_client.send_transaction(tx)
 
