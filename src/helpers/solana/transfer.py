@@ -15,15 +15,7 @@ from spl.token.async_client import AsyncToken
 from spl.token.constants import TOKEN_PROGRAM_ID
 from spl.token.instructions import get_associated_token_address, transfer_checked
 from spl.token.instructions import TransferCheckedParams
-from solana.rpc.async_api import AsyncClient
 from solana.transaction import Transaction
-from spl.token.instructions import (
-    get_associated_token_address,
-    transfer_checked,
-    TransferCheckedParams,
-)
-from spl.token.constants import TOKEN_PROGRAM_ID
-from solders.compute_budget import set_compute_unit_limit, set_compute_unit_price  # type: ignore
 import asyncio
 
 
@@ -44,29 +36,32 @@ class SolanaTransferHelper:
         Args:
             async_client: Async RPC client instance.
             wallet: Sender's wallet keypair.
-            to: Recipient's public key.
+            to: Recipient's public key as string.
             amount: Amount of tokens to transfer.
-            spl_token: SPL token mint address (default: None).
+            spl_token: SPL token mint address as string (default: None).
 
         Returns:
             Transaction signature.
         """
-        to = Pubkey.from_string(to)
         try:
+            # Convert string address to Pubkey
+            to_pubkey = Pubkey.from_string(to)
+            
             if spl_token:
                 signature = await SolanaTransferHelper._transfer_spl_tokens(
                     async_client,
                     wallet,
-                    to,
-                    Pubkey.from_string(spl_token),
+                    to_pubkey,
+                    spl_token,  # Pass as string, convert inside function
                     amount,
                 )
                 token_identifier = str(spl_token)
             else:
                 signature = await SolanaTransferHelper._transfer_native_sol(
-                    async_client, wallet, to, amount
+                    async_client, wallet, to_pubkey, amount
                 )
                 token_identifier = "SOL"
+                
             await SolanaTransferHelper._confirm_transaction(async_client, signature)
 
             logger.debug(
@@ -76,7 +71,6 @@ class SolanaTransferHelper:
             return signature
 
         except Exception as error:
-
             logger.error(f"Transfer failed: {error}")
             raise RuntimeError(f"Transfer operation failed: {error}") from error
 
@@ -88,41 +82,48 @@ class SolanaTransferHelper:
         Transfer native SOL.
 
         Args:
-            agent: SolanaAgentKit instance
-            to: Recipient's public key
+            async_client: AsyncClient instance
+            wallet: Sender's keypair
+            to: Recipient's Pubkey
             amount: Amount of SOL to transfer
 
         Returns:
             Transaction signature.
         """
-        sender = wallet
-        receiver = Pubkey.from_string(to)
-        ix = transfer(
-            TransferParams(
-                from_pubkey=sender.pubkey(),
-                to_pubkey=receiver,
-                lamports=SOL_FEES,
+        try:
+            # Convert amount to lamports
+            lamports = int(amount * LAMPORTS_PER_SOL)
+            
+            ix = transfer(
+                TransferParams(
+                    from_pubkey=wallet.pubkey(),
+                    to_pubkey=to,
+                    lamports=lamports,
+                )
             )
-        )
-        blockhash = (await async_client.get_latest_blockhash()).value.blockhash
-        msg = MessageV0.try_compile(
-            payer=sender.pubkey(),
-            instructions=[ix],
-            address_lookup_table_accounts=[],
-            recent_blockhash=blockhash,
-        )
-        tx = VersionedTransaction(msg, [sender])
+            
+            blockhash = (await async_client.get_latest_blockhash()).value.blockhash
+            msg = MessageV0.try_compile(
+                payer=wallet.pubkey(),
+                instructions=[ix],
+                address_lookup_table_accounts=[],
+                recent_blockhash=blockhash,
+            )
+            tx = VersionedTransaction(msg, [wallet])
 
-        result = await async_client.send_transaction(tx)
+            result = await async_client.send_transaction(tx)
+            return result.value
 
-        return result.value
+        except Exception as e:
+            logger.error(f"Native SOL transfer failed: {str(e)}")
+            raise
 
     @staticmethod
     async def _transfer_spl_tokens(
         async_client: AsyncClient,
         wallet: Keypair,
         recipient: Pubkey,
-        spl_token: Pubkey,
+        spl_token: str,
         amount: float,
     ) -> str:
         """
@@ -130,72 +131,68 @@ class SolanaTransferHelper:
 
         Args:
             async_client: Async RPC client instance.
-            payer: Payer's public key (wallet address).
-            recipient: Recipient's public key.
-            spl_token: SPL token mint address.
+            wallet: Sender's keypair.
+            recipient: Recipient's Pubkey.
+            spl_token: SPL token mint address as string.
             amount: Amount of tokens to transfer.
 
         Returns:
             Transaction signature.
         """
-
-        compute_unit_limit = 10_000
-        compute_unit_price = 1_000_000
-        connection = async_client
-        keypair = wallet
-        token_mint = spl_token
-        spl_client = AsyncToken(
-            connection, spl_token, TOKEN_PROGRAM_ID, keypair.pubkey()
-        )
-        mint = await spl_client.get_mint_info()
-        decimals = mint.decimals
-        amount = math.floor(amount * 10**decimals)
-        sender_token_address = get_associated_token_address(keypair.pubkey(), spl_token)
-        recipient_token_address = get_associated_token_address(recipient, spl_token)
-        blockhash_resp = await connection.get_latest_blockhash()
-        recent_blockhash = blockhash_resp.value.blockhash
-
-        ixs = []
-        # if compute_unit_limit > 0:
-        #    ixs.append(set_compute_unit_limit(compute_unit_limit))
-        # if compute_unit_price > 0:
-        #    ixs.append(set_compute_unit_price(compute_unit_price))
-        # log all transfer params
-        logger.debug(f"\nAmount: {amount}")
-        logger.debug(f"\nSender Token Address: {sender_token_address}")
-        logger.debug(f"\nRecipient Token Address: {recipient_token_address}")
-        logger.debug(f"\nOwner: {keypair.pubkey()}")
-        logger.debug(f"\nMint: {token_mint}")
-        logger.debug(f"\nDecimals: {decimals}")
-        logger.debug(f"\nProgram ID: {TOKEN_PROGRAM_ID}")
-
-        ixs.append(
-            transfer_checked(
+        try:
+            # Convert string token address to Pubkey
+            token_mint = Pubkey.from_string(spl_token)
+            
+            spl_client = AsyncToken(
+                async_client, token_mint, TOKEN_PROGRAM_ID, wallet.pubkey()
+            )
+            
+            # Get token decimals
+            mint = await spl_client.get_mint_info()
+            decimals = mint.decimals
+            
+            # Convert amount to token units
+            token_amount = math.floor(amount * 10**decimals)
+            
+            # Get token accounts
+            sender_token_address = get_associated_token_address(wallet.pubkey(), token_mint)
+            recipient_token_address = get_associated_token_address(recipient, token_mint)
+            
+            # Create transfer instruction
+            transfer_ix = transfer_checked(
                 TransferCheckedParams(
                     source=sender_token_address,
                     dest=recipient_token_address,
-                    owner=keypair.pubkey(),
+                    owner=wallet.pubkey(),
                     mint=token_mint,
-                    amount=amount,
+                    amount=token_amount,
                     decimals=decimals,
                     program_id=TOKEN_PROGRAM_ID,
                 )
             )
-        )
-        blockhash = (await async_client.get_latest_blockhash()).value.blockhash
-        msg = MessageV0.try_compile(
-            payer=wallet.pubkey(),
-            instructions=ixs,
-            address_lookup_table_accounts=[],
-            recent_blockhash=blockhash,
-        )
-        tx = VersionedTransaction(msg, [wallet])
 
-        result = await async_client.send_transaction(tx)
+            # Build and send transaction
+            blockhash = (await async_client.get_latest_blockhash()).value.blockhash
+            msg = MessageV0.try_compile(
+                payer=wallet.pubkey(),
+                instructions=[transfer_ix],
+                address_lookup_table_accounts=[],
+                recent_blockhash=blockhash,
+            )
+            tx = VersionedTransaction(msg, [wallet])
 
-        return result.value
+            result = await async_client.send_transaction(tx)
+            return result.value
+
+        except Exception as e:
+            logger.error(f"SPL token transfer failed: {str(e)}")
+            raise
 
     @staticmethod
     async def _confirm_transaction(async_client: AsyncClient, signature: str) -> None:
         """Wait for transaction confirmation."""
-        await async_client.confirm_transaction(signature, commitment=Confirmed)
+        try:
+            await async_client.confirm_transaction(signature, commitment=Confirmed)
+        except Exception as e:
+            logger.error(f"Transaction confirmation failed: {str(e)}")
+            raise
