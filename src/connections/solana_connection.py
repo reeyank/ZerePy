@@ -335,7 +335,9 @@ class SolanaConnection(BaseConnection):
 
     # todo: test on mainnet
     def get_tps(self) -> int:
-        return SolanaPerformanceTracker.fetch_current_tps(self)
+        res = SolanaPerformanceTracker.fetch_current_tps(self._get_connection_async())
+        res = asyncio.run(res)
+        return res
 
     def get_token_by_ticker(self, ticker: str) -> str:
         if ticker in SPL_TOKENS:
@@ -353,22 +355,23 @@ class SolanaConnection(BaseConnection):
         description: str,
         image_url: str,
         options: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        logger.info(f"STUB: Launch Pump & Fun token {token_ticker}")
-        res = PumpfunTokenManager.launch_pumpfun_token(
-            self._get_connection_async(),
-            self._get_wallet(),
-            token_name,
-            token_ticker,
-            description,
-            image_url,
-            options,
-        )
-        res = asyncio.run(res)
-        logger.debug(
-            f"Launched Pump & Fun token {token_ticker}\nToken Mint: {res['mint']}"
-        )
-        return res
+    ) -> str:
+        return "Not implemented"
+        # logger.info(f"STUB: Launch Pump & Fun token {token_ticker}")
+        # res = PumpfunTokenManager.launch_pumpfun_token(
+        #    self._get_connection_async(),
+        #    self._get_wallet(),
+        #    token_name,
+        #    token_ticker,
+        #    description,
+        #    image_url,
+        #    options,
+        # )
+        # res = asyncio.run(res)
+        # logger.debug(
+        #    f"Launched Pump & Fun token {token_ticker}\nToken Mint: {res['mint']}"
+        # )
+        # return res
 
     def perform_action(self, action_name: str, kwargs) -> Any:
         """Execute a Solana action with validation"""

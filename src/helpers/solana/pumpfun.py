@@ -158,33 +158,36 @@ class PumpfunTokenManager:
         Returns:
             TokenLaunchResult containing the transaction signature, mint address, and metadata URI.
         """
-        logger.debug("Starting token launch process...")
+        logger.info("Starting token launch process...")
         mint_keypair = Keypair()
-        logger.debug(f"Mint public key: {mint_keypair.pubkey()}")
+        logger.info(f"Mint public key: {mint_keypair.pubkey()}")
         try:
             # Use a single aiohttp session for both metadata upload and transaction creation
             async with aiohttp.ClientSession() as session:
-                logger.debug("Uploading metadata to IPFS...")
+                logger.info("Uploading metadata to IPFS...")
                 metadata_response = await PumpfunTokenManager._upload_metadata(
                     session, token_name, token_ticker, description, image_url, options
                 )
-                logger.debug(f"Metadata response: {metadata_response}")
+                logger.info(f"Metadata response: {metadata_response}")
 
-                logger.debug("Creating token transaction...")
+                logger.info("Creating token transaction...")
                 tx_data = await PumpfunTokenManager._create_token_transaction(
                     session, wallet, mint_keypair, metadata_response, options
                 )
-                logger.debug("Deserializing transaction...")
+                logger.info("Deserializing transaction...")
                 tx = VersionedTransaction.from_bytes(tx_data)
+                logger.info("Signing transaction...")
                 signature = wallet.sign_message(message.to_bytes_versioned(tx.message))
+                logger.info("Sending transaction to Solana...")
                 signed_txn = VersionedTransaction.populate(tx.message, [signature])
+                logger.info("Transaction sent!")
                 opts = TxOpts(skip_preflight=False, preflight_commitment=Processed)
-                result = await async_client.send_raw_transaction(
-                    txn=bytes(signed_txn), opts=opts
-                )
+                logger.info("Transaction sent!1")
+                result = await async_client.send_transaction(signed_txn, opts=opts)
+                logger.info("Transaction sent!2")
                 transaction_id = json.loads(result.to_json())["result"]
 
-                logger.debug(
+                logger.info(
                     f"Transaction sent: https://explorer.solana.com/tx/{transaction_id}"
                 )
                 logger.debug(

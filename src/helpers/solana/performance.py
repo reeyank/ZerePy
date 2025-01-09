@@ -100,7 +100,7 @@ class SolanaPerformanceTracker:
         """Clear all recorded performance metrics."""
         self.metrics_history.clear()
 
-    async def fetch_current_tps(async_client: AsyncClient, wallet: Keypair) -> float:
+    async def fetch_current_tps(async_client: AsyncClient) -> float:
         """
         Fetch the current Transactions Per Second (TPS) on the Solana network.
 
