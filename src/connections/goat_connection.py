@@ -189,9 +189,9 @@ class GoatConnection(BaseConnection):
         return parameters
 
     @property
-    def is_llm_provider(self) -> None:
+    def is_llm_provider(self) -> bool:
         """Whether this connection provides LLM capabilities"""
-        return None
+        return False
 
     def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Validate GOAT configuration"""
