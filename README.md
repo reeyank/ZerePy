@@ -244,6 +244,7 @@ Use `help` in the CLI to see all available commands. Key commands include:
 - `list-actions`: Show available actions for a connection
 - `configure-connection`: Set up a new connection
 - `chat`: Start interactive chat with agent
+- `clear`: Clear the terminal screen
 
 ## Star History
 
