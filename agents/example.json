@@ -40,6 +40,10 @@
       "model": "claude-3-5-sonnet-20241022"
     },
     {
+      "name": "solana",
+      "rpc": "https://api.mainnet-beta.solana.com"
+    },
+    {
       "name": "eternalai",
       "model": "NousResearch/Hermes-3-Llama-3.1-70B-FP8",
       "chain_id": "45762"

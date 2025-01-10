@@ -11,6 +11,7 @@ similar core functionality as Zerebro. For creative outputs, you'll need to fine
 
 - CLI interface for managing agents
 - Modular connection system
+- Blockchain integration with Solana
 
 ### Social Platform Integrations
 
@@ -43,7 +44,7 @@ System:
 - Python 3.10 or higher (3.10 and 3.11 are best for beginner users)
 - Poetry 1.5 or higher
 
-API keys:
+Environment Variables:
 
 - LLM: make an account and grab an API key (at least one)
   - OpenAI: https://platform.openai.com/api-keys
@@ -54,6 +55,9 @@ API keys:
   - X API: https://developer.x.com/en/docs/authentication/oauth-1-0a/api-key-and-secret
   - Farcaster: Warpcast recovery phrase
   - Echochambers: API key and endpoint
+- On-chain Integration:
+  - Solana: private key (in base58 format) for transactions
+  - RPC URL (defaults to public endpoints)
 
 ## Installation
 
@@ -105,6 +109,8 @@ poetry run python main.py
    configure-connection anthropic  # For Anthropic
    configure-connection farcaster  # For Farcaster
    configure-connection eternalai  # For EternalAI
+   configure-connection solana     # For Solana
+   configure-connection solana     # For Solana
    ```
 
 2. Use `list-connections` to see all available connections and their status
@@ -121,6 +127,16 @@ poetry run python main.py
    ```
 
 ## Platform Features
+
+### Solana
+
+- Transfer SOL and SPL tokens
+- Swap tokens using Jupiter
+- Check token balances
+- Stake SOL
+- Monitor network TPS
+- Query token information
+- Request testnet/devnet funds
 
 ### Twitter/X
 
@@ -188,6 +204,10 @@ Create a new JSON file in the `agents` directory following this structure:
       "name": "eternalai",
       "model": "NousResearch/Hermes-3-Llama-3.1-70B-FP8",
       "chain_id": "45762"
+    },
+    {
+      "name": "solana",
+      "rpc": "https://api.mainnet-beta.solana.com"
     },
     {
       "name": "ollama",

@@ -5,7 +5,7 @@ from dotenv import load_dotenv, set_key
 from openai import OpenAI
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
 
-logger = logging.getLogger("openai")
+logger = logging.getLogger("connections.openai_connection")
 
 class OpenAIConnectionError(Exception):
     """Base exception for OpenAI connection errors"""
