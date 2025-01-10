@@ -5,7 +5,7 @@ from dotenv import load_dotenv, set_key
 from anthropic import Anthropic, NotFoundError
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("connections.anthropic_connection")
 
 class AnthropicConnectionError(Exception):
     """Base exception for Anthropic connection errors"""
@@ -78,17 +78,17 @@ class AnthropicConnection(BaseConnection):
 
     def configure(self) -> bool:
         """Sets up Anthropic API authentication"""
-        print("\n🤖 ANTHROPIC API SETUP")
+        logger.info("\n🤖 ANTHROPIC API SETUP")
 
         if self.is_configured():
-            print("\nAnthropic API is already configured.")
+            logger.info("\nAnthropic API is already configured.")
             response = input("Do you want to reconfigure? (y/n): ")
             if response.lower() != 'y':
                 return True
 
-        print("\n📝 To get your Anthropic API credentials:")
-        print("1. Go to https://console.anthropic.com/settings/keys")
-        print("2. Create a new API key.")
+        logger.info("\n📝 To get your Anthropic API credentials:")
+        logger.info("1. Go to https://console.anthropic.com/settings/keys")
+        logger.info("2. Create a new API key.")
         
         api_key = input("\nEnter your Anthropic API key: ")
 
@@ -103,8 +103,8 @@ class AnthropicConnection(BaseConnection):
             client = Anthropic(api_key=api_key)
             client.models.list()
 
-            print("\n✅ Anthropic API configuration successfully saved!")
-            print("Your API key has been stored in the .env file.")
+            logger.info("\n✅ Anthropic API configuration successfully saved!")
+            logger.info("Your API key has been stored in the .env file.")
             return True
 
         except Exception as e:

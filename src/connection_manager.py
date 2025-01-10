@@ -8,6 +8,7 @@ from src.connections.twitter_connection import TwitterConnection
 from src.connections.farcaster_connection import FarcasterConnection
 from src.connections.ollama_connection import OllamaConnection
 from src.connections.echochambers_connection import EchochambersConnection
+from src.connections.solana_connection import SolanaConnection
 from src.connections.hyperbolic_connection import HyperbolicConnection
 from src.connections.galadriel_connection import GaladrielConnection
 
@@ -35,6 +36,8 @@ class ConnectionManager:
             return OllamaConnection
         elif class_name == "echochambers":
             return EchochambersConnection
+        elif class_name == "solana":
+            return SolanaConnection
         elif class_name == "hyperbolic":
             return HyperbolicConnection
         elif class_name == "galadriel":
@@ -134,22 +137,25 @@ class ConnectionManager:
                 
             action = connection.actions[action_name]
             
-            # Count required parameters
-            required_params_count = sum(1 for param in action.parameters if param.required)
-            
-            # Check if we have enough parameters
-            if len(params) != required_params_count:
-                param_names = [param.name for param in action.parameters if param.required]
-                logging.error(f"\nError: Expected {required_params_count} required parameters for {action_name}: {', '.join(param_names)}")
-                return None
-            
-            # Convert list of params to kwargs dictionary
+            # Convert list of params to kwargs dictionary, handling both required and optional params
             kwargs = {}
             param_index = 0
-            for param in action.parameters:
-                if param.required:
+            
+            # Add provided parameters up to the number provided
+            for i, param in enumerate(action.parameters):
+                if param_index < len(params):
                     kwargs[param.name] = params[param_index]
                     param_index += 1
+            
+            # Validate all required parameters are present
+            missing_required = [
+                param.name for param in action.parameters 
+                if param.required and param.name not in kwargs
+            ]
+            
+            if missing_required:
+                logging.error(f"\nError: Missing required parameters: {', '.join(missing_required)}")
+                return None
             
             return connection.perform_action(action_name, kwargs)
             
