@@ -243,6 +243,19 @@ files = [
 ]
 
 [[package]]
+name = "asyncio"
+version = "3.4.3"
+description = "reference implementation of PEP 3156"
+optional = false
+python-versions = "*"
+files = [
+    {file = "asyncio-3.4.3-cp33-none-win32.whl", hash = "sha256:b62c9157d36187eca799c378e572c969f0da87cd5fc42ca372d92cdb06e7e1de"},
+    {file = "asyncio-3.4.3-cp33-none-win_amd64.whl", hash = "sha256:c46a87b48213d7464f22d9a497b9eef8c1928b68320a2fa94240f969f6fec08c"},
+    {file = "asyncio-3.4.3-py3-none-any.whl", hash = "sha256:c4d18b22701821de07bd6aea8b53d21449ec0ec5680645e5317062ea21817d2d"},
+    {file = "asyncio-3.4.3.tar.gz", hash = "sha256:83360ff8bc97980e4ff25c964c7bd3923d333d177aa4f7fb736b019f26c7cb41"},
+]
+
+[[package]]
 name = "attrs"
 version = "24.3.0"
 description = "Classes Without Boilerplate"
@@ -1171,32 +1184,33 @@ files = [
 
 [[package]]
 name = "goat-sdk"
-version = "0.1.0"
+version = "0.1.1"
 description = "Goat 🐐 (Great Onchain Agent Toolkit) is an open-source framework for connecting AI agents to any onchain app"
 optional = false
 python-versions = "<4.0,>=3.10"
 files = [
-    {file = "goat_sdk-0.1.0-py3-none-any.whl", hash = "sha256:61810a3626e26735ef2ab1be8b96c60f9e3731429ffce83374c7e448d0eac093"},
-    {file = "goat_sdk-0.1.0.tar.gz", hash = "sha256:1ef7925531c396d6b4b7b83a8281cfbb0b5a853ce7f01b1ec15918e8981ed0dd"},
+    {file = "goat_sdk-0.1.1-py3-none-any.whl", hash = "sha256:e8489b737ecb8b4090b704cfd3bdbd334b0bdc9117124aae97773e5ced2dcc5d"},
+    {file = "goat_sdk-0.1.1.tar.gz", hash = "sha256:c19184a8fc8001076098ba608f99a2301161752e4c57fbac4f2d587862edfd86"},
 ]
 
 [package.dependencies]
+asyncio = ">=3.4.1,<4.0.0"
 pydantic = ">=2.10.0,<3.0.0"
 
 [[package]]
 name = "goat-sdk-plugin-coingecko"
-version = "0.1.0"
+version = "0.1.1"
 description = "Goat plugin for Coingecko"
 optional = false
 python-versions = "<4.0,>=3.10"
 files = [
-    {file = "goat_sdk_plugin_coingecko-0.1.0-py3-none-any.whl", hash = "sha256:2cf19af8631b41f57ba1982b32854c3d6d20a3de6c72d17a6e6949533798ddea"},
-    {file = "goat_sdk_plugin_coingecko-0.1.0.tar.gz", hash = "sha256:c446f4c4aca57dd164a4dfe3802585730f845e4563585d297684b8e465861b19"},
+    {file = "goat_sdk_plugin_coingecko-0.1.1-py3-none-any.whl", hash = "sha256:6f15f9a5c9096fabb46700dea3efcb267eda1eb5bbb443c9294287ff0ef7a919"},
+    {file = "goat_sdk_plugin_coingecko-0.1.1.tar.gz", hash = "sha256:3a0b72ad95202415bb0b26b6581c93aa833e5b23542afda6fe34251bc2421a97"},
 ]
 
 [package.dependencies]
 aiohttp = ">=3.8.6,<4.0.0"
-goat-sdk = ">=0.1.0,<0.2.0"
+goat-sdk = ">=0.1.1,<0.2.0"
 
 [[package]]
 name = "goat-sdk-plugin-erc20"
@@ -2800,4 +2814,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10,<3.12.0"
-content-hash = "ce6d8d67ef2e106f083d1c238eb667d72f988013e761c08603705ea2e7ff853a"
+content-hash = "d6e50b087279e877420ded2c75d7fbd8e495f47b7fe2409418a9be3c43742131"
