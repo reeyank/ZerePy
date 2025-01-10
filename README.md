@@ -7,12 +7,25 @@ similar core functionality as Zerebro. For creative outputs, you'll need to fine
 
 ## Features
 
+### Core Platform
+
 - CLI interface for managing agents
-- Twitter/X integration
-- Farcaster integration
-- Echochambers integration
-- OpenAI/Anthropic/EternalAI LLM support
 - Modular connection system
+- Blockchain integration with Solana
+
+### Social Platform Integrations
+
+- Twitter/X
+- Farcaster
+- Echochambers
+
+### Language Model Support
+
+- OpenAI
+- Anthropic
+- EternalAI
+- Ollama
+- Hyperbolic
 
 ## Quickstart
 
@@ -31,16 +44,20 @@ System:
 - Python 3.10 or higher (3.10 and 3.11 are best for beginner users)
 - Poetry 1.5 or higher
 
-API keys:
+Environment Variables:
 
 - LLM: make an account and grab an API key (at least one)
   - OpenAI: https://platform.openai.com/api-keys
   - Anthropic: https://console.anthropic.com/account/keys
   - EternalAI: https://eternalai.oerg/api
+  - Hyperbolic: https://app.hyperbolic.xyz
 - Social (based on your needs):
   - X API: https://developer.x.com/en/docs/authentication/oauth-1-0a/api-key-and-secret
   - Farcaster: Warpcast recovery phrase
   - Echochambers: API key and endpoint
+- On-chain Integration:
+  - Solana: private key (in base58 format) for transactions
+  - RPC URL (defaults to public endpoints)
 
 ## Installation
 
@@ -92,6 +109,8 @@ poetry run python main.py
    configure-connection anthropic  # For Anthropic
    configure-connection farcaster  # For Farcaster
    configure-connection eternalai  # For EternalAI
+   configure-connection solana     # For Solana
+   configure-connection solana     # For Solana
    ```
 
 2. Use `list-connections` to see all available connections and their status
@@ -108,6 +127,16 @@ poetry run python main.py
    ```
 
 ## Platform Features
+
+### Solana
+
+- Transfer SOL and SPL tokens
+- Swap tokens using Jupiter
+- Check token balances
+- Stake SOL
+- Monitor network TPS
+- Query token information
+- Request testnet/devnet funds
 
 ### Twitter/X
 
@@ -170,13 +199,36 @@ Create a new JSON file in the `agents` directory following this structure:
     {
       "name": "anthropic",
       "model": "claude-3-5-sonnet-20241022"
+    },
+    {
+      "name": "eternalai",
+      "model": "NousResearch/Hermes-3-Llama-3.1-70B-FP8",
+      "chain_id": "45762"
+    },
+    {
+      "name": "solana",
+      "rpc": "https://api.mainnet-beta.solana.com"
+    },
+    {
+      "name": "ollama",
+      "base_url": "http://localhost:11434",
+      "model": "llama3.2"
+    },
+    {
+      "name": "hyperbolic",
+      "model": "meta-llama/Meta-Llama-3-70B-Instruct"
     }
   ],
   "tasks": [
     { "name": "post-tweet", "weight": 1 },
     { "name": "reply-to-tweet", "weight": 1 },
     { "name": "like-tweet", "weight": 1 }
-  ]
+  ],
+  "use_time_based_weights": false,
+  "time_based_multipliers": {
+    "tweet_night_multiplier": 0.4,
+    "engagement_day_multiplier": 1.5
+  }
 }
 ```
 
@@ -192,6 +244,7 @@ Use `help` in the CLI to see all available commands. Key commands include:
 - `list-actions`: Show available actions for a connection
 - `configure-connection`: Set up a new connection
 - `chat`: Start interactive chat with agent
+- `clear`: Clear the terminal screen
 
 ## Star History
 

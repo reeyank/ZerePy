@@ -4,7 +4,7 @@ import json
 from typing import Dict, Any
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("connections.ollama_connection")
 
 
 class OllamaConnectionError(Exception):
@@ -57,9 +57,9 @@ class OllamaConnection(BaseConnection):
 
     def configure(self) -> bool:
         """Setup Ollama connection (minimal configuration required)"""
-        print("\n🤖 OLLAMA CONFIGURATION")
+        logger.info("\n🤖 OLLAMA CONFIGURATION")
 
-        print("\nℹ️ Ensure the Ollama service is running locally or accessible at the specified base URL.")
+        logger.info("\nℹ️ Ensure the Ollama service is running locally or accessible at the specified base URL.")
         response = input(f"Is Ollama accessible at {self.base_url}? (y/n): ")
 
         if response.lower() != 'y':
@@ -69,7 +69,7 @@ class OllamaConnection(BaseConnection):
         try:
             # Test connection
             self._test_connection()
-            print("\n✅ Ollama connection successfully configured!")
+            logger.info("\n✅ Ollama connection successfully configured!")
             return True
         except Exception as e:
             logger.error(f"Configuration failed: {e}")
