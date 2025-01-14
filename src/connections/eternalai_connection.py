@@ -170,9 +170,9 @@ class EternalAIConnection(BaseConnection):
                 chain_id = "45762"
             logger.info(f"chain_id {chain_id}")
 
-            agent_id = self.config["eternalai_agent_id"] or "1"
-            contract_address = self.config["eternalai_contract_address"] or "0x5799F6349D7E9DAeD0d5c7f90F5467eC929cc89e"
-            rpc = self.config["eternalai_rp_url"] or "https://rpc.symbiosis.eternalai.org/"
+            agent_id = self.config["agent_id"] or "1"
+            contract_address = self.config["contract_address"] or "0x5799F6349D7E9DAeD0d5c7f90F5467eC929cc89e"
+            rpc = self.config["rpc_url"] or "https://rpc.symbiosis.eternalai.org/"
 
             if agent_id and contract_address and rpc:
                 logger.info(f"agent_id: {agent_id}, contract_address: {contract_address}")

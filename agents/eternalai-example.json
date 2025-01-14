@@ -29,9 +29,9 @@
       "name": "eternalai",
       "model": "NousResearch/Hermes-3-Llama-3.1-70B-FP8",
       "chain_id": "45762",
-      "eternalai_agent_id": 1,
-      "eternalai_contract_address": "0x5799F6349D7E9DAeD0d5c7f90F5467eC929cc89e",
-      "eternalai_rp_url": "https://rpc.symbiosis.eternalai.org/"
+      "agent_id": 1,
+      "contract_address": "0x5799F6349D7E9DAeD0d5c7f90F5467eC929cc89e",
+      "rpc_url": "https://rpc.symbiosis.eternalai.org/"
     }
   ],
   "tasks": [
