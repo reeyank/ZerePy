@@ -145,8 +145,10 @@ class EternalAIConnection(BaseConnection):
         if "ipfs://" not in url:
             raise Exception("invalid on-chain system prompt")
         url = url.replace("ipfs://", "https://gateway.lighthouse.storage/ipfs/")
+        logger.info(f"On-chain system prompt with {url}")
         response = requests.get(url)
-        if response.status_code != 200:
+        logger.info(f"On-chain system prompt response: {response}")
+        if response.status_code == 200:
             return response.text
         else:
             raise Exception("invalid on-chain system prompt")
