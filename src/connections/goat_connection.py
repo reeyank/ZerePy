@@ -9,6 +9,7 @@ from web3 import Web3
 from dotenv import set_key, load_dotenv
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
 from src.helpers import print_h_bar
+from src.action_handler import register_action
 from goat import PluginBase, ToolBase, WalletClientBase, get_tools
 from goat_wallets.web3 import Web3EVMWalletClient
 
@@ -248,6 +249,12 @@ class GoatConnection(BaseConnection):
                 parameters=action_parameters,
             )
             self._action_registry[tool.name] = tool
+
+            register_action(tool.name)(
+                lambda agent, tool_name=tool.name, **kwargs: self.perform_action(
+                    tool_name, **kwargs
+                )
+            )
 
     def register_actions(self) -> None:
         """Initial action registration - deferred until wallet is configured"""
