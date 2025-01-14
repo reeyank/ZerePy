@@ -9,7 +9,9 @@ from web3 import Web3
 import requests
 
 logger = logging.getLogger("connections.eternalai_connection")
-
+IPFS = "ipfs://"
+LIGHTHOUSE_IPFS = "https://gateway.lighthouse.storage/ipfs/"
+GCS_ETERNAL_AI_BASE_URL = "https://cdn.eternalai.org/upload/"
 
 class EternalAIConnectionError(Exception):
     """Base exception for EternalAI connection errors"""
@@ -142,16 +144,19 @@ class EternalAIConnection(BaseConnection):
 
     @staticmethod
     def get_on_chain_system_prompt_content(url: str) -> str:
-        if "ipfs://" not in url:
+        if IPFS not in url:
             raise Exception("invalid on-chain system prompt")
-        url = url.replace("ipfs://", "https://gateway.lighthouse.storage/ipfs/")
-        logger.info(f"On-chain system prompt with {url}")
-        response = requests.get(url)
-        logger.info(f"On-chain system prompt response: {response}")
+        light_house = url.replace(IPFS, LIGHTHOUSE_IPFS)
+        response = requests.get(light_house)
         if response.status_code == 200:
             return response.text
         else:
-            raise Exception("invalid on-chain system prompt")
+            gcs = url.replace(IPFS, GCS_ETERNAL_AI_BASE_URL)
+            response = requests.get(gcs)
+            if response.status_code == 200:
+                return response.text
+            else:
+                raise Exception(f"invalid on-chain system prompt response status{response.status_code}")
 
     def generate_text(self, prompt: str, system_prompt: str, model: str = None, chain_id: str = None, **kwargs) -> str:
         """Generate text using EternalAI models"""
@@ -198,9 +203,10 @@ class EternalAIConnection(BaseConnection):
                 contract = web3.eth.contract(address=contract_address, abi=contract_abi)
                 result = contract.functions.getAgentSystemPrompt(agent_id).call()
                 logger.info(f"on-chain system_prompt: {result}")
-                if len(result > 0):
+                if len(result) > 0:
                     try:
-                        system_prompt = self.get_on_chain_system_prompt_content(result[0])
+                        system_prompt = self.get_on_chain_system_prompt_content(result[0].decode("utf-8"))
+                        logging.info(f"new system_prompt: {system_prompt}")
                     except Exception as e:
                         logger.error(f"get on-chain system_prompt fail {e}")
 
