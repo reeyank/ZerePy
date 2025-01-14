@@ -6,6 +6,7 @@ from dotenv import load_dotenv, set_key
 from openai import OpenAI
 from src.connections.base_connection import BaseConnection, Action, ActionParameter
 from web3 import Web3
+import requests
 
 logger = logging.getLogger("connections.eternalai_connection")
 
@@ -139,6 +140,17 @@ class EternalAIConnection(BaseConnection):
                 logger.debug(f"Configuration check failed: {e}")
             return False
 
+    @staticmethod
+    def get_on_chain_system_prompt_content(url: str) -> str:
+        if "ipfs://" not in url:
+            raise Exception("invalid on-chain system prompt")
+        url.replace("ipfs://", "https://gateway.lighthouse.storage/ipfs/")
+        response = requests.get(url)
+        if response.status_code != 200:
+            return response.text
+        else:
+            raise Exception("invalid on-chain system prompt")
+
     def generate_text(self, prompt: str, system_prompt: str, model: str = None, chain_id: str = None, **kwargs) -> str:
         """Generate text using EternalAI models"""
         try:
@@ -184,7 +196,11 @@ class EternalAIConnection(BaseConnection):
                 contract = web3.eth.contract(address=contract_address, abi=contract_abi)
                 result = contract.functions.getAgentSystemPrompt(agent_id).call()
                 logger.info(f"on-chain system_prompt: {result}")
-                system_prompt = result
+                if len(result > 0):
+                    try:
+                        system_prompt = self.get_on_chain_system_prompt_content(result[0])
+                    except Exception as e:
+                        logger.error(f"get on-chain system_prompt fail {e}")
 
             completion = client.chat.completions.create(
                 model=model,
