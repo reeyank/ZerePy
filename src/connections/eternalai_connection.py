@@ -12,6 +12,7 @@ logger = logging.getLogger("connections.eternalai_connection")
 IPFS = "ipfs://"
 LIGHTHOUSE_IPFS = "https://gateway.lighthouse.storage/ipfs/"
 GCS_ETERNAL_AI_BASE_URL = "https://cdn.eternalai.org/upload/"
+AGENT_CONTRACT_ABI = [{"inputs": [{"internalType": "uint256","name": "_agentId","type": "uint256"}],"name": "getAgentSystemPrompt","outputs": [{"internalType": "bytes[]","name": "","type": "bytes[]"}],"stateMutability": "view","type": "function"}]
 
 class EternalAIConnectionError(Exception):
     """Base exception for EternalAI connection errors"""
@@ -183,28 +184,7 @@ class EternalAIConnection(BaseConnection):
                 # call on-chain system prompt
                 web3 = Web3(Web3.HTTPProvider(rpc))
                 logger.info(f"web3 connected to {rpc} {web3.is_connected()}")
-                contract_abi = [
-                    {
-                        "inputs": [
-                            {
-                                "internalType": "uint256",
-                                "name": "_agentId",
-                                "type": "uint256"
-                            }
-                        ],
-                        "name": "getAgentSystemPrompt",
-                        "outputs": [
-                            {
-                                "internalType": "bytes[]",
-                                "name": "",
-                                "type": "bytes[]"
-                            }
-                        ],
-                        "stateMutability": "view",
-                        "type": "function"
-                    }
-                ]
-                contract = web3.eth.contract(address=contract_address, abi=contract_abi)
+                contract = web3.eth.contract(address=contract_address, abi=AGENT_CONTRACT_ABI)
                 result = contract.functions.getAgentSystemPrompt(agent_id).call()
                 logger.info(f"on-chain system_prompt: {result}")
                 if len(result) > 0:
