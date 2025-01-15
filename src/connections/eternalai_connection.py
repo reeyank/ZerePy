@@ -143,20 +143,24 @@ class EternalAIConnection(BaseConnection):
             return False
 
     @staticmethod
-    def get_on_chain_system_prompt_content(url: str) -> str:
-        if IPFS not in url:
-            raise Exception("invalid on-chain system prompt")
-        light_house = url.replace(IPFS, LIGHTHOUSE_IPFS)
-        response = requests.get(light_house)
-        if response.status_code == 200:
-            return response.text
-        else:
-            gcs = url.replace(IPFS, GCS_ETERNAL_AI_BASE_URL)
-            response = requests.get(gcs)
+    def get_on_chain_system_prompt_content(on_chain_data: str) -> str:
+        if IPFS in on_chain_data:
+            light_house = on_chain_data.replace(IPFS, LIGHTHOUSE_IPFS)
+            response = requests.get(light_house)
             if response.status_code == 200:
                 return response.text
             else:
-                raise Exception(f"invalid on-chain system prompt response status{response.status_code}")
+                gcs = on_chain_data.replace(IPFS, GCS_ETERNAL_AI_BASE_URL)
+                response = requests.get(gcs)
+                if response.status_code == 200:
+                    return response.text
+                else:
+                    raise Exception(f"invalid on-chain system prompt response status{response.status_code}")
+        else:
+            if len(on_chain_data) > 0:
+                return on_chain_data
+            else:
+                raise Exception(f"invalid on-chain system prompt")
 
     def generate_text(self, prompt: str, system_prompt: str, model: str = None, chain_id: str = None, **kwargs) -> str:
         """Generate text using EternalAI models"""
