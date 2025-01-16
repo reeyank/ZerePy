@@ -28,7 +28,10 @@
     {
       "name": "eternalai",
       "model": "NousResearch/Hermes-3-Llama-3.1-70B-FP8",
-      "chain_id": "45762"
+      "chain_id": "8453",
+      "agent_id": 1711,
+      "contract_address": "0xAed016e060e2fFE3092916b1650Fc558D62e1CCC",
+      "rpc_url": "https://mainnet.base.org/"
     }
   ],
   "tasks": [
