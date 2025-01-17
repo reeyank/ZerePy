@@ -1,7 +1,6 @@
 # GENERAL
 .idea/
 __pycache__/
-.vscode/
 *.py~
 
 # CONFIG FILES
