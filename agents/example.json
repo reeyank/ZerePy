@@ -77,10 +77,6 @@
     {
       "name": "galadriel",
       "model": "gpt-3.5-turbo"
-    },
-    {
-      "name": "allora",
-      "chain_slug": "testnet"
     }
   ],
   "tasks": [
