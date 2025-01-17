@@ -12,6 +12,7 @@ from src.connections.echochambers_connection import EchochambersConnection
 from src.connections.solana_connection import SolanaConnection
 from src.connections.hyperbolic_connection import HyperbolicConnection
 from src.connections.galadriel_connection import GaladrielConnection
+from src.connections.allora_connection import AlloraConnection
 
 logger = logging.getLogger("connection_manager")
 
@@ -45,6 +46,8 @@ class ConnectionManager:
             return HyperbolicConnection
         elif class_name == "galadriel":
             return GaladrielConnection
+        elif class_name == "allora":
+            return AlloraConnection
 
         return None
     
